@@ -137,15 +137,14 @@ class WebToMarkdownApp(QWidget):
         v_pattern = re.compile(pattern, re.MULTILINE | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}\n'\n{m.group(2)}", markdown_text)
 
-
-
-
         markdown_text = self.fix_text_replace(markdown_text)
 
         markdown_text = self.my_massage_format(markdown_text)
         markdown_text = self.table_restore(markdown_text)
 
         markdown_text = self.fix_text_regexp(markdown_text)
+
+        markdown_text = self.fix_code_blocks(markdown_text)
 
         save_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить как...", "page", "Markdown Files (*.md)"
@@ -218,6 +217,22 @@ class WebToMarkdownApp(QWidget):
     def fix_text_regexp(text):
         text = re.sub(r'^.*?(?=>\s*\[!important\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
         return text
+
+    @staticmethod
+    def fix_code_blocks(text):
+        def replacer(match):
+            # Вырезаем содержимое блока и удаляем переносы и лишние пробелы
+            code = match.group(2)
+            # code = code.replace('\n', ' ').strip()
+            print(code)
+            count = 4
+            code = '\n'.join(line[count:] if line.startswith(' ' * count) else line for line in code.splitlines())
+            if code.startswith('\n'):
+                code = code[1:]
+            return f'```{match.group(1)}{code}\n```'
+
+        pattern = r'```(\w+)(.*?)```'
+        return re.sub(pattern, replacer, text, flags=re.DOTALL)
 
 
 if __name__ == "__main__":
