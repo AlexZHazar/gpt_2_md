@@ -1,6 +1,5 @@
 # pip install PySide6 html2text requests chardet
 
-
 """
 Web to Markdown Converter using PySide6
 
@@ -8,6 +7,8 @@ Web to Markdown Converter using PySide6
 2. convert MHTML to Markdown by this app
 
 """
+
+
 import re
 import sys
 
@@ -124,22 +125,27 @@ class WebToMarkdownApp(QWidget):
         self.save_as_markdown(html_content)
 
     def save_as_markdown(self, html_content: str):
+
         markdown_text = html2text.html2text(html_content)
 
-        pattern = re.compile(r'^\s*(\w+)$\s+$\s+КопироватьРедактировать(.+?^$)',
-            re.MULTILINE | re.DOTALL | re.VERBOSE)
+        mark = r"(?:КопироватьРедактировать|Всегда\s+показывать\s+подробности.+?Копировать)"
+        pattern = r'^\s*(\w+)$\s+$\s+' + mark + '(.+?^$)'
+        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+        markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}{m.group(2)}```\n", markdown_text)
 
-        # Функция замены
-        def replacer(match):
-            return f"```{match.group(1)}{match.group(2)}```"
+        pattern = r'(^\s*\*+[^*]+?)\n(\s*```)'
+        v_pattern = re.compile(pattern, re.MULTILINE | re.VERBOSE)
+        markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}\n'\n{m.group(2)}", markdown_text)
 
-        # Заменяем
-        markdown_text = pattern.sub(replacer, markdown_text)
 
-        markdown_text = markdown_text.replace('<module>', '<_module_>')
+
+
+        markdown_text = self.fix_text_replace(markdown_text)
 
         markdown_text = self.my_massage_format(markdown_text)
         markdown_text = self.table_restore(markdown_text)
+
+        markdown_text = self.fix_text_regexp(markdown_text)
 
         save_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить как...", "page", "Markdown Files (*.md)"
@@ -158,7 +164,7 @@ class WebToMarkdownApp(QWidget):
     def my_massage_format(text: str) -> str:
 
         text = re.sub(r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
-                      r"""> [!important] Вопрос:
+                      r"""> [!important] Запрос:
     > \1
     """, text, flags=re.DOTALL)
 
@@ -177,7 +183,7 @@ class WebToMarkdownApp(QWidget):
         def process_table_block(match):
             start = match.group(1)  # строка с ---|---|---
             body = match.group(3)  # тело таблицы
-            end = match.group(4)  # строка с * * *
+            end = match.group(4)  # конец таблицы
 
             # Разобьем тело на строки
             lines = body.splitlines()
@@ -201,8 +207,21 @@ class WebToMarkdownApp(QWidget):
 
         return pattern.sub(process_table_block, text)
 
+    @staticmethod
+    def fix_text_replace(text):
+        text = text.replace('<module>', '<_module_>')
+        text = text.replace('~~~', '~~')
+        return text
+
+
+    @staticmethod
+    def fix_text_regexp(text):
+        text = re.sub(r'^.*?(?=>\s*\[!important\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
+        return text
+
 
 if __name__ == "__main__":
+
     app = QApplication(sys.argv)
     window = WebToMarkdownApp()
     window.resize(500, 50)
