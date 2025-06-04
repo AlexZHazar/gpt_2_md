@@ -47,6 +47,7 @@ class WebToMarkdownApp(QWidget):
         self.load_url_button.clicked.connect(self.handle_url)
         self.load_file_button.clicked.connect(self.handle_mhtml)
 
+
     def handle_url(self):
         url = self.url_input.text().strip()
         if not url.startswith("http"):
@@ -128,8 +129,18 @@ class WebToMarkdownApp(QWidget):
 
         markdown_text = html2text.html2text(html_content)
 
+        ########### fix start
         mark = r"(?:КопироватьРедактировать|Всегда\s+показывать\s+подробности.+?Копировать)"
-        pattern = r'^\s*(\w+)$\s+$\s+' + mark + '(.+?^$)'
+
+        pattern = r'(^\s+$)\s+$(\s+' + mark + ')'
+        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+        markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}text\n{m.group(2)}", markdown_text)
+
+        pattern = r'(^\s+\w+$\s+$\s+' + mark + ')'
+        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+        markdown_text = v_pattern.sub(lambda m: f"\n{m.group(1)}", markdown_text)
+
+        pattern = r'^\s+(\w+)$\s+$\s+' + mark + '(.+?^$)'
         v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}{m.group(2)}```\n", markdown_text)
 
@@ -145,6 +156,7 @@ class WebToMarkdownApp(QWidget):
         markdown_text = self.fix_text_regexp(markdown_text)
 
         markdown_text = self.fix_code_blocks(markdown_text)
+        ############ fix finish
 
         save_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить как...", "page", "Markdown Files (*.md)"
@@ -216,6 +228,7 @@ class WebToMarkdownApp(QWidget):
     @staticmethod
     def fix_text_regexp(text):
         text = re.sub(r'^.*?(?=>\s*\[!important\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
+        text = re.sub(r'^\|', '-|', text, flags=re.MULTILINE)
         return text
 
     @staticmethod
@@ -224,7 +237,7 @@ class WebToMarkdownApp(QWidget):
             # Вырезаем содержимое блока и удаляем переносы и лишние пробелы
             code = match.group(2)
             # code = code.replace('\n', ' ').strip()
-            print(code)
+            # print(code)
             count = 4
             code = '\n'.join(line[count:] if line.startswith(' ' * count) else line for line in code.splitlines())
             if code.startswith('\n'):
