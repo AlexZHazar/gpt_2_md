@@ -18,7 +18,7 @@ import html2text
 from email import policy
 from email.parser import BytesParser
 
-from pprint import pprint
+# from pprint import pprint
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -169,7 +169,6 @@ class WebToMarkdownApp(QWidget):
     def save(self):
         page = self.page_name_template.text()
         page = 'page' if page.strip()=='' else page
-        print("a", page)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
         if self.split_pages_cb.isChecked():
@@ -223,9 +222,7 @@ class WebToMarkdownApp(QWidget):
 
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
-
-        keywords = [(re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
-                     re.sub(r'.·', '·', w.strip())) for w in keywords]
+        keywords = self.convert_tags(keywords)
         # pprint(keywords)
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
@@ -418,6 +415,11 @@ class WebToMarkdownApp(QWidget):
 
         pattern = r'```(\w+)(.*?)```'
         return re.sub(pattern, replacer, text, flags=re.DOTALL)
+
+    @staticmethod
+    def convert_tags(tags : list[str]) -> list[tuple[str, str]]:
+        return [(re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
+                     re.sub(r'.·', '·', w.strip())) for w in tags]
 
 
 if __name__ == "__main__":
