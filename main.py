@@ -56,6 +56,7 @@ class WebToMarkdownApp(QWidget):
         self.mhtml_path_label = QLabel("")
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
+        self.page_name_template = QLineEdit("page")
         self.range_input = QLineEdit()
         self.path_label = QLabel("Путь не выбран")
         self.choose_btn = QPushButton("Указать папку сохранения")
@@ -66,6 +67,10 @@ class WebToMarkdownApp(QWidget):
         group_layout = QVBoxLayout(group_box)
 
         group_layout.addWidget(self.split_pages_cb)
+        group_layout.addWidget(QLabel())
+        group_layout.addWidget(QLabel("Укажите шаблон имени страницы по правилам именования файлов:"))
+        group_layout.addWidget(self.page_name_template)
+        group_layout.addWidget(QLabel())
         group_layout.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех страниц"))
         group_layout.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
         group_layout.addWidget(self.range_input)
@@ -102,8 +107,10 @@ class WebToMarkdownApp(QWidget):
     def on_checkbox_toggled(self, checked: bool):
         if checked:
             self.range_input.setEnabled(True)
+            self.page_name_template.setEnabled(True)
         else:
             self.range_input.setEnabled(False)
+            self.page_name_template.setEnabled(False)
         # print("✅" if checked else "❌")
 
     def activate_all_widgets(self, parent: QWidget, status: bool = True):
@@ -112,6 +119,7 @@ class WebToMarkdownApp(QWidget):
             self.load_file_button.setEnabled(True)
         if status:
             self.range_input.setEnabled(False)
+            self.page_name_template.setEnabled(False)
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Укажите путь к проекту Obsidian", self.export_path)
@@ -153,6 +161,9 @@ class WebToMarkdownApp(QWidget):
         return ""
 
     def save(self):
+        page = self.page_name_template.text()
+        page = 'page' if page.strip()=='' else page
+        print("a", page)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
         if self.split_pages_cb.isChecked():
@@ -163,14 +174,14 @@ class WebToMarkdownApp(QWidget):
                 f.writelines('\n')
                 for idx, block in enumerate(blocks):
                     blocks[idx] = str(idx+1)+"\n"+block
-                    f.writelines(f"[[exported_{self.now}/page{idx+1:03}|{idx+1}]]      {idx + 1}\n{self.get_line(block)}"+"\n"*2)
+                    f.writelines(f"[[exported_{self.now}/{page}{idx+1:03}|{idx+1}]]      {idx + 1}\n{self.get_line(block)}"+"\n"*2)
 
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
                 with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
-                        f.writelines(f"[[exported_{self.now}/page{m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                        f.writelines(f"[[exported_{self.now}/{page}{m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
             self.save_blocks(merged, base_path)
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
@@ -199,6 +210,8 @@ class WebToMarkdownApp(QWidget):
         return merged
 
     def save_blocks(self, merged_blocks, base_path):
+        page = self.page_name_template.text()
+        page = 'page' if page.strip()=='' else page
         tag_string_len = 5
         # keywords = self.config.get("Keywords", "words", fallback="").split(',')
 
@@ -211,10 +224,10 @@ class WebToMarkdownApp(QWidget):
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
-            filename = f"page{idx+1:03}.md"
-            prev_link = f"[[exported_{self.now}/page{idx:03}|page{idx:03}]]"+" "*20 if idx > 0 else ""
+            filename = f"{page}{idx+1:03}.md"
+            prev_link = f"[[exported_{self.now}/{page}{idx:03}|{page}{idx:03}]]"+" "*20 if idx > 0 else ""
             header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*20
-            next_link = f"[[exported_{self.now}/page{idx+2:03}|page{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
+            next_link = f"[[exported_{self.now}/{page}{idx+2:03}|{page}{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
             range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
@@ -405,6 +418,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = WebToMarkdownApp()
     # window.resize(600, 250)
-    window.setFixedSize(600, 350)
+    window.setFixedSize(600, 450)
     window.show()
     sys.exit(app.exec())
