@@ -143,6 +143,12 @@ class WebToMarkdownApp(QWidget):
 
         return groups
 
+    @staticmethod
+    def get_line(text: str, line_n: int = 2, max_length: int = 80) -> str:
+        lines = text.splitlines()
+        if len(lines) >= line_n + 1:
+            return lines[line_n][:max_length]
+        return ""
 
     def save(self):
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -151,9 +157,18 @@ class WebToMarkdownApp(QWidget):
             base_path = os.path.join(base_path, f"exported_{self.now}")
             os.makedirs(base_path, exist_ok=True)
             blocks = self.split_text(self.md_text)
-            for idx, block in enumerate(blocks):
-                blocks[idx] = str(idx+1)+"\n"+block
+            with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
+                f.writelines('\n')
+                for idx, block in enumerate(blocks):
+                    blocks[idx] = str(idx+1)+"\n"+block
+                    f.writelines(f"[[exported_{self.now}/page{idx+1:03}|{idx+1}]]\n{self.get_line(block)}"+"\n"*2)
+
             merged = self.merge_blocks(blocks)
+            if self.range_input.text().strip():
+                with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
+                    f.writelines('\n')
+                    for m_idx, m_block in enumerate(merged):
+                        f.writelines(f"[[exported_{self.now}/page{m_idx+1:03}|{m_idx+1}]]\n{self.get_line(m_block[0], 3)}"+"\n"*2)
             self.save_blocks(merged, base_path)
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
@@ -194,9 +209,10 @@ class WebToMarkdownApp(QWidget):
             content = "\n\n".join(group)
             filename = f"page{idx+1:03}.md"
             prev_link = f"[[exported_{self.now}/page{idx:03}|page{idx:03}]]"+" "*20 if idx > 0 else ""
+            header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*20
             next_link = f"[[exported_{self.now}/page{idx+2:03}|page{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
             range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
-            nav = f"\n---{range_info}\n{prev_link}{next_link}\n\n---\n"
+            nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
             tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
