@@ -163,14 +163,14 @@ class WebToMarkdownApp(QWidget):
                 f.writelines('\n')
                 for idx, block in enumerate(blocks):
                     blocks[idx] = str(idx+1)+"\n"+block
-                    f.writelines(f"[[exported_{self.now}/page{idx+1:03}|{idx+1}]]\n{self.get_line(block)}"+"\n"*2)
+                    f.writelines(f"[[exported_{self.now}/page{idx+1:03}|{idx+1}]]      {idx + 1}\n{self.get_line(block)}"+"\n"*2)
 
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
                 with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
-                        f.writelines(f"[[exported_{self.now}/page{m_idx+1:03}|{m_idx+1}]]\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                        f.writelines(f"[[exported_{self.now}/page{m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
             self.save_blocks(merged, base_path)
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
