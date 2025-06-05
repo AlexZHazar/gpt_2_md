@@ -18,6 +18,8 @@ import html2text
 from email import policy
 from email.parser import BytesParser
 
+from pprint import pprint
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton,
@@ -203,7 +205,9 @@ class WebToMarkdownApp(QWidget):
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
 
-        keywords = [(re.sub('_', ' ', re.sub('—', '/', re.sub(r'^.+/', '', w.strip()))), w.strip()) for w in keywords]
+        keywords = [(re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
+                     re.sub(r'.·', '·', w.strip())) for w in keywords]
+        # pprint(keywords)
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
@@ -215,6 +219,7 @@ class WebToMarkdownApp(QWidget):
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
             tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
+            # tags = [f"#{word[1]}" for word in keywords if word[0] in content]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
             full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
 
