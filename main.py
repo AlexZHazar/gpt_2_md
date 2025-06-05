@@ -63,17 +63,23 @@ class WebToMarkdownApp(QWidget):
         self.save_btn = QPushButton("Сохранить")
 
         # === Группа "Параметры экспорта"
-        group_box = QGroupBox("Параметры экспорта")
-        group_layout = QVBoxLayout(group_box)
+        group_box_export = QGroupBox("Параметры экспорта")
+        group_layout_export = QVBoxLayout(group_box_export)
 
-        group_layout.addWidget(self.split_pages_cb)
-        group_layout.addWidget(QLabel())
-        group_layout.addWidget(QLabel("Укажите шаблон имени страницы по правилам именования файлов:"))
-        group_layout.addWidget(self.page_name_template)
-        group_layout.addWidget(QLabel())
-        group_layout.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех страниц"))
-        group_layout.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
-        group_layout.addWidget(self.range_input)
+        # === Группа "Параметры экспорта"
+        group_box_pages = QGroupBox("Укажите номера страниц, которые нужно сохранить")
+        group_layout_pages = QVBoxLayout(group_box_pages)
+
+        group_layout_pages.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех страниц"))
+        group_layout_pages.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
+        group_layout_pages.addWidget(self.range_input)
+
+        group_layout_export.addWidget(self.split_pages_cb)
+        group_layout_export.addWidget(QLabel())
+        group_layout_export.addWidget(QLabel("Укажите шаблон имени страницы по правилам именования файлов:"))
+        group_layout_export.addWidget(self.page_name_template)
+        group_layout_export.addWidget(QLabel())
+        group_layout_export.addWidget(group_box_pages)
 
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.load_file_button)
@@ -81,7 +87,7 @@ class WebToMarkdownApp(QWidget):
 
         self.layout.addWidget(QLabel())
 
-        self.layout.addWidget(group_box)
+        self.layout.addWidget(group_box_export)
 
         self.layout.addWidget(QLabel())
 
@@ -418,6 +424,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = WebToMarkdownApp()
     # window.resize(600, 250)
-    window.setFixedSize(600, 450)
+    window.setFixedSize(1000, 500)
     window.show()
     sys.exit(app.exec())
