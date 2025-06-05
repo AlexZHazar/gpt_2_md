@@ -203,7 +203,7 @@ class WebToMarkdownApp(QWidget):
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
 
-        keywords = [(re.sub('_', ' ', re.sub('\*', '/', re.sub(r'^.+/', '', w.strip()))), w.strip()) for w in keywords]
+        keywords = [(re.sub('_', ' ', re.sub('—', '/', re.sub(r'^.+/', '', w.strip()))), w.strip()) for w in keywords]
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
