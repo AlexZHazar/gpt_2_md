@@ -21,7 +21,7 @@ from email.parser import BytesParser
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton,
-    QFileDialog, QMessageBox, QLabel, QCheckBox
+    QFileDialog, QMessageBox, QLabel, QCheckBox, QGroupBox
 )
 
 
@@ -59,13 +59,25 @@ class WebToMarkdownApp(QWidget):
         self.choose_btn = QPushButton("Указать папку сохранения")
         self.save_btn = QPushButton("Сохранить")
 
+        # === Группа "Параметры экспорта"
+        group_box = QGroupBox("Параметры экспорта")
+        group_layout = QVBoxLayout(group_box)
+
+        group_layout.addWidget(self.split_pages_cb)
+        group_layout.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех страниц"))
+        group_layout.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
+        group_layout.addWidget(self.range_input)
+
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.load_file_button)
         self.layout.addWidget(self.mhtml_path_label)
 
-        self.layout.addWidget(self.split_pages_cb)
-        self.layout.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
-        self.layout.addWidget(self.range_input)
+        self.layout.addWidget(QLabel())
+
+        self.layout.addWidget(group_box)
+
+        self.layout.addWidget(QLabel())
+
         self.layout.addWidget(self.path_label)
         self.layout.addWidget(self.choose_btn)
         self.layout.addWidget(self.save_btn)
@@ -90,7 +102,7 @@ class WebToMarkdownApp(QWidget):
             self.range_input.setEnabled(True)
         else:
             self.range_input.setEnabled(False)
-        print("✅" if checked else "❌")
+        # print("✅" if checked else "❌")
 
     def activate_all_widgets(self, parent: QWidget, status: bool = True):
         for widget in parent.findChildren(QWidget, options=Qt.FindChildrenRecursively):
@@ -139,6 +151,8 @@ class WebToMarkdownApp(QWidget):
             base_path = os.path.join(base_path, f"exported_{self.now}")
             os.makedirs(base_path, exist_ok=True)
             blocks = self.split_text(self.md_text)
+            for idx, block in enumerate(blocks):
+                blocks[idx] = str(idx+1)+"\n"+block
             merged = self.merge_blocks(blocks)
             self.save_blocks(merged, base_path)
         else:
@@ -153,7 +167,8 @@ class WebToMarkdownApp(QWidget):
 
     def merge_blocks(self, blocks: list[str]) -> list[list[str]]:
         if not self.range_input.text().strip():
-            return [[block.strip()] for block in blocks]
+            # return [[f"{idx+1}\n{block.strip()}"] for idx, block in enumerate(blocks)]  # TODO
+            return [[block.strip()] for block in blocks]  # TODO
 
         page_groups = self.parse_page_groups(self.range_input.text())
         merged = []
@@ -169,18 +184,22 @@ class WebToMarkdownApp(QWidget):
 
     def save_blocks(self, merged_blocks, base_path):
         tag_string_len = 5
-        keywords = self.config.get("Keywords", "words", fallback="").split(',')
-        keywords = [(re.sub('-', '/', re.sub(r'^.+/', '', w.strip())), w.strip()) for w in keywords]
+        # keywords = self.config.get("Keywords", "words", fallback="").split(',')
+
+        raw_value = self.config.get("Keywords", "words", fallback="")
+        keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
+
+        keywords = [(re.sub('_', ' ', re.sub('\*', '/', re.sub(r'^.+/', '', w.strip()))), w.strip()) for w in keywords]
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
             filename = f"page{idx+1:03}.md"
             prev_link = f"[[exported_{self.now}/page{idx:03}|page{idx:03}]]"+" "*20 if idx > 0 else ""
             next_link = f"[[exported_{self.now}/page{idx+2:03}|page{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
-            range_info = f"\n%%  {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+            range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
             nav = f"\n---{range_info}\n{prev_link}{next_link}\n\n---\n"
 
-            tags = [f"#{word[1]}" for word in keywords if word[0] in content]
+            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
             full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
 
@@ -363,9 +382,9 @@ class WebToMarkdownApp(QWidget):
 
 
 if __name__ == "__main__":
-
     app = QApplication(sys.argv)
     window = WebToMarkdownApp()
-    window.resize(600, 250)
+    # window.resize(600, 250)
+    window.setFixedSize(600, 350)
     window.show()
     sys.exit(app.exec())
