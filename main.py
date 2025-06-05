@@ -7,72 +7,199 @@ Web to Markdown Converter using PySide6
 2. convert MHTML to Markdown by this app
 
 """
-
-
+import os
 import re
 import sys
-
+from datetime import datetime
+from configparser import ConfigParser
 import quopri
 import chardet
-import requests
 import html2text
 from email import policy
 from email.parser import BytesParser
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton,
-    QFileDialog, QMessageBox, QLabel
+    QFileDialog, QMessageBox, QLabel, QCheckBox
 )
+
+
+CONFIG_PATH = "config.ini"
+
+
+def load_config():
+    config = ConfigParser()
+    config.read(CONFIG_PATH)
+    return config
+
+
+def save_config(config):
+    with open(CONFIG_PATH, 'w') as f:
+        config.write(f)
 
 
 class WebToMarkdownApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Web/MHTML → Markdown")
 
-        self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Введите URL веб-страницы")
+        self.md_text = ""
+        self.file_path = ""
+        self.now = None
 
-        self.load_url_button = QPushButton("Загрузить по URL")
+        self.setWindowTitle("MHTML → Markdown")
+        self.config = load_config()
+
         self.load_file_button = QPushButton("Открыть MHTML файл")
+        self.mhtml_path_label = QLabel("")
+
+        self.split_pages_cb = QCheckBox("Разбить по страницам")
+        self.range_input = QLineEdit()
+        self.path_label = QLabel("Путь не выбран")
+        self.choose_btn = QPushButton("Указать папку сохранения")
+        self.save_btn = QPushButton("Сохранить")
 
         self.layout = QVBoxLayout()
-        # self.layout.addWidget(QLabel("Источник URL:"))
-        # self.layout.addWidget(self.url_input)
-        # self.layout.addWidget(self.load_url_button)
-        # self.layout.addWidget(QLabel("Источник .mhtml:"))
         self.layout.addWidget(self.load_file_button)
+        self.layout.addWidget(self.mhtml_path_label)
+
+        self.layout.addWidget(self.split_pages_cb)
+        self.layout.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
+        self.layout.addWidget(self.range_input)
+        self.layout.addWidget(self.path_label)
+        self.layout.addWidget(self.choose_btn)
+        self.layout.addWidget(self.save_btn)
 
         self.setLayout(self.layout)
 
-        self.load_url_button.clicked.connect(self.handle_url)
         self.load_file_button.clicked.connect(self.handle_mhtml)
 
+        self.choose_btn.clicked.connect(self.choose_folder)
+        self.save_btn.clicked.connect(self.save)
+        self.split_pages_cb.stateChanged.connect(self.on_checkbox_toggled)
 
-    def handle_url(self):
-        url = self.url_input.text().strip()
-        if not url.startswith("http"):
-            QMessageBox.warning(self, "Ошибка", "Введите корректный URL.")
-            return
+        # set default path from config
+        default_path = self.config.get("Settings", "default_path", fallback=".")
+        self.export_path = default_path
+        self.path_label.setText("Путь к проекту Obsidian: "+default_path)
 
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            html_content = response.text
-        except requests.RequestException as e:
-            QMessageBox.critical(self, "Ошибка загрузки", str(e))
-            return
+        self.activate_all_widgets(self, False)
 
-        self.save_as_markdown(html_content)
+    def on_checkbox_toggled(self, checked: bool):
+        if checked:
+            self.range_input.setEnabled(True)
+        else:
+            self.range_input.setEnabled(False)
+        print("✅" if checked else "❌")
+
+    def activate_all_widgets(self, parent: QWidget, status: bool = True):
+        for widget in parent.findChildren(QWidget, options=Qt.FindChildrenRecursively):
+            widget.setEnabled(status)
+            self.load_file_button.setEnabled(True)
+        if status:
+            self.range_input.setEnabled(False)
+
+    def choose_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Укажите путь к проекту Obsidian", self.export_path)
+        if folder:
+            self.export_path = folder
+            self.path_label.setText("Путь к проекту Obsidian: "+folder)
+            self.config.set("Settings", "default_path", folder)
+            save_config(self.config)
+
+    @staticmethod
+    def parse_page_groups(text: str) -> list[list[int]]:
+        text = text.replace(' ', '')
+        groups = []
+
+        # Поиск скобочных групп
+        pattern = r'\((.*?)\)|([^,()]+)'
+        matches = re.findall(pattern, text)
+
+        for group_str, single in matches:
+            raw = group_str if group_str else single
+            items = raw.split(',')
+
+            group = set()
+            for item in items:
+                if '-' in item:
+                    start, end = item.split('-')
+                    group.update(range(int(start), int(end) + 1))
+                elif item:
+                    group.add(int(item))
+            groups.append(sorted(group))
+
+        return groups
+
+
+    def save(self):
+        self.now = datetime.now().strftime("%Y%m%d%H%M%S")
+        base_path = self.export_path
+        if self.split_pages_cb.isChecked():
+            base_path = os.path.join(base_path, f"exported_{self.now}")
+            os.makedirs(base_path, exist_ok=True)
+            blocks = self.split_text(self.md_text)
+            merged = self.merge_blocks(blocks)
+            self.save_blocks(merged, base_path)
+        else:
+            file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(self.md_text)
+            QMessageBox.information(self, "Готово", f"Сохранено в: {file_path}")
+
+    def split_text(self, text):
+        text = re.sub(r'[>] \[!important\] Запрос:', 's'*50+'> [!important] Запрос:', text, flags=re.DOTALL | re.MULTILINE)
+        return re.split('s'*50, text)[1:]
+
+    def merge_blocks(self, blocks: list[str]) -> list[list[str]]:
+        if not self.range_input.text().strip():
+            return [[block.strip()] for block in blocks]
+
+        page_groups = self.parse_page_groups(self.range_input.text())
+        merged = []
+
+        for group in page_groups:
+            merged_group = []
+            for i in group:
+                if 1 <= i <= len(blocks):
+                    merged_group.append(blocks[i - 1].strip())
+            merged.append(merged_group)
+
+        return merged
+
+    def save_blocks(self, merged_blocks, base_path):
+        tag_string_len = 5
+        keywords = self.config.get("Keywords", "words", fallback="").split(',')
+        keywords = [(re.sub('-', '/', re.sub(r'^.+/', '', w.strip())), w.strip()) for w in keywords]
+        # print(keywords)
+        for idx, group in enumerate(merged_blocks):
+            content = "\n\n".join(group)
+            filename = f"page{idx+1:03}.md"
+            prev_link = f"[[exported_{self.now}/page{idx:03}|page{idx:03}]]"+" "*20 if idx > 0 else ""
+            next_link = f"[[exported_{self.now}/page{idx+2:03}|page{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
+            range_info = f"\n%%  {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+            nav = f"\n---{range_info}\n{prev_link}{next_link}\n\n---\n"
+
+            tags = [f"#{word[1]}" for word in keywords if word[0] in content]
+            tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
+            full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
+
+            with open(os.path.join(base_path, filename), "w", encoding="utf-8") as f:
+                f.write(full_text)
+
+        QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
+        QMessageBox.warning(self, "Важно", "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
+                            "\n\nЛучше закрыть/открыть Obsidian проект заново")
 
     def handle_mhtml(self):
-        file_path, _ = QFileDialog.getOpenFileName(
+        self.file_path, _ = QFileDialog.getOpenFileName(
             self, "Открыть MHTML", "", "MHTML файлы (*.mhtml *.mht)"
         )
-        if not file_path:
+        if not self.file_path:
             return
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(self.file_path, 'rb') as f:
                 msg = BytesParser(policy=policy.default).parse(f)
 
             html_content = None
@@ -158,18 +285,10 @@ class WebToMarkdownApp(QWidget):
         markdown_text = self.fix_code_blocks(markdown_text)
         ############ fix finish
 
-        save_path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить как...", "page", "Markdown Files (*.md)"
-        )
-        if not save_path:
-            return
-
-        try:
-            with open(save_path, "w", encoding="utf-8") as f:
-                f.write(markdown_text)
-            QMessageBox.information(self, "Успех", f"Сохранено:\n{save_path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка сохранения", str(e))
+        self.md_text = markdown_text
+        QMessageBox.information(self, "Готово", f"Преобразование завершено:\n{self.file_path}")
+        self.mhtml_path_label.setText(self.file_path)
+        self.activate_all_widgets(self, True)
 
     @staticmethod
     def my_massage_format(text: str) -> str:
@@ -178,9 +297,6 @@ class WebToMarkdownApp(QWidget):
                       r"""> [!important] Запрос:
     > \1
     """, text, flags=re.DOTALL)
-
-        # for k, v in html_escaping.items():
-        #     text = text.replace(k, v)
 
         return text
 
@@ -224,7 +340,6 @@ class WebToMarkdownApp(QWidget):
         text = text.replace('~~~', '~~')
         return text
 
-
     @staticmethod
     def fix_text_regexp(text):
         text = re.sub(r'^.*?(?=>\s*\[!important\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
@@ -234,9 +349,8 @@ class WebToMarkdownApp(QWidget):
     @staticmethod
     def fix_code_blocks(text):
         def replacer(match):
-            # Вырезаем содержимое блока и удаляем переносы и лишние пробелы
+            # Вырезаем содержимое блока и обрабатываем
             code = match.group(2)
-            # code = code.replace('\n', ' ').strip()
             # print(code)
             count = 4
             code = '\n'.join(line[count:] if line.startswith(' ' * count) else line for line in code.splitlines())
@@ -252,6 +366,6 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     window = WebToMarkdownApp()
-    window.resize(500, 50)
+    window.resize(600, 250)
     window.show()
     sys.exit(app.exec())
