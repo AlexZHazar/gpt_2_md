@@ -167,8 +167,7 @@ class WebToMarkdownApp(QWidget):
 
     def merge_blocks(self, blocks: list[str]) -> list[list[str]]:
         if not self.range_input.text().strip():
-            # return [[f"{idx+1}\n{block.strip()}"] for idx, block in enumerate(blocks)]  # TODO
-            return [[block.strip()] for block in blocks]  # TODO
+            return [[block.strip()] for block in blocks]
 
         page_groups = self.parse_page_groups(self.range_input.text())
         merged = []
