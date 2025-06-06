@@ -18,7 +18,7 @@ import html2text
 from email import policy
 from email.parser import BytesParser
 
-from pprint import pprint
+# from pprint import pprint
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -184,7 +184,7 @@ class WebToMarkdownApp(QWidget):
                 f.writelines('\n')
                 for idx, block in enumerate(blocks):
                     blocks[idx] = str(idx+1)+"\n"+block
-                    f.writelines(f"[[exported_{self.now}/{page}{idx+1:03}|{idx+1}]]      {idx + 1}\n{self.get_line(block)}"+"\n"*2)
+                    f.writelines(f"[[exported_{self.now}/{page} {idx+1:03}|{idx+1}]]      {idx + 1}\n{self.get_line(block)}"+"\n"*2)
 
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
@@ -192,7 +192,7 @@ class WebToMarkdownApp(QWidget):
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
                         f.writelines(f"%%  Запросы:  {', '.join(str(x) for x in self.page_groups[m_idx])}  %%\n")
-                        f.writelines(f"[[exported_{self.now}/{page}{m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                        f.writelines(f"[[exported_{self.now}/{page} {m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
             self.save_blocks(merged, base_path)
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
@@ -229,21 +229,21 @@ class WebToMarkdownApp(QWidget):
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
         keywords = self.convert_tags(keywords)
-        pprint(keywords)
+        # pprint(keywords)
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
-            filename = f"{page}{idx+1:03}.md"
-            prev_link = f"[[exported_{self.now}/{page}{idx:03}|{page}{idx:03}]]  <"+" "*10 if idx > 0 else ""
+            filename = f"{page} {idx+1:03}.md"
+            prev_link = f"[[exported_{self.now}/{page} {idx:03}|{page} {idx:03}]]  <"+" "*10 if idx > 0 else ""
             header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*10
-            next_link = f">  [[exported_{self.now}/{page}{idx+2:03}|{page}{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
+            next_link = f">  [[exported_{self.now}/{page} {idx+2:03}|{page} {idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
             # range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
 
             range_info = f"\n%%  Запросы:  {', '.join(str(x) for x in self.page_groups[idx])}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
 
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
-            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
+            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]  # check!
             # tags = [f"#{word[1]}" for word in keywords if word[0] in content]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
 
