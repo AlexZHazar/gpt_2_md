@@ -18,7 +18,7 @@ import html2text
 from email import policy
 from email.parser import BytesParser
 
-# from pprint import pprint
+from pprint import pprint
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -223,7 +223,7 @@ class WebToMarkdownApp(QWidget):
     def save_blocks(self, merged_blocks, base_path):
         page = self.page_name_template.text()
         page = 'page' if page.strip()=='' else page
-        tag_string_len = self.config.get("Settings", "tag_string_len", fallback="")
+        tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
         # keywords = self.config.get("Keywords", "words", fallback="").split(',')
 
         raw_value = self.config.get("Keywords", "words", fallback="")
@@ -233,6 +233,8 @@ class WebToMarkdownApp(QWidget):
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
+            print(content)
+            print('='*100)
             filename = f"{page} {idx+1:03}.md"
             prev_link = f"[[exported_{self.now}/{page} {idx:03}|{page} {idx:03}]]  <"+" "*10 if idx > 0 else ""
             header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*10
@@ -243,7 +245,8 @@ class WebToMarkdownApp(QWidget):
 
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
-            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]  # check!
+            # tags = [f"#{word[1]}" for word in keywords if re.match(f'.*\\b{word[0]}\\b.*', content, re.IGNORECASE | re.UNICODE | re.MULTILINE | re.DOTALL | re.VERBOSE)]
+            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
             # tags = [f"#{word[1]}" for word in keywords if word[0] in content]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
 
@@ -353,6 +356,7 @@ class WebToMarkdownApp(QWidget):
         self.md_text = markdown_text
         QMessageBox.information(self, "Готово", f"Преобразование завершено:\n{self.file_path}")
         self.mhtml_path_label.setText(self.file_path)
+        self.split_pages_cb.setChecked(False)
         self.activate_all_widgets(self, True)
 
     @staticmethod
