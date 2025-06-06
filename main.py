@@ -223,7 +223,7 @@ class WebToMarkdownApp(QWidget):
     def save_blocks(self, merged_blocks, base_path):
         page = self.page_name_template.text()
         page = 'page' if page.strip()=='' else page
-        tag_string_len = 5
+        tag_string_len = self.config.get("Settings", "tag_string_len", fallback="")
         # keywords = self.config.get("Keywords", "words", fallback="").split(',')
 
         raw_value = self.config.get("Keywords", "words", fallback="")
@@ -399,10 +399,12 @@ class WebToMarkdownApp(QWidget):
 
         return pattern.sub(process_table_block, text)
 
-    @staticmethod
-    def fix_text_replace(text):
-        text = text.replace('<module>', '<_module_>')
-        text = text.replace('~~~', '~~')
+    def fix_text_replace(self, text):
+        raw_value = self.config.get("Hard_replacements", "replacements", fallback="")
+        replacements = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
+        for replacement in replacements:
+            r = replacement.split(':')
+            text = text.replace(r[0], r[1])
         return text
 
     @staticmethod
