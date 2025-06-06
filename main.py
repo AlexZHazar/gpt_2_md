@@ -18,7 +18,7 @@ import html2text
 from email import policy
 from email.parser import BytesParser
 
-# from pprint import pprint
+from pprint import pprint
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -48,6 +48,7 @@ class WebToMarkdownApp(QWidget):
         self.md_text = ""
         self.file_path = ""
         self.now = None
+        self.page_groups = []
 
         self.setWindowTitle("MHTML → Markdown")
         self.config = load_config()
@@ -157,6 +158,10 @@ class WebToMarkdownApp(QWidget):
                     group.add(int(item))
             groups.append(sorted(group))
 
+        # groups_enum = list(enumerate(groups))
+        # print(groups)
+        # print(groups_enum)
+
         return groups
 
     @staticmethod
@@ -186,6 +191,7 @@ class WebToMarkdownApp(QWidget):
                 with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
+                        f.writelines(f"%%  Запросы:  {', '.join(str(x) for x in self.page_groups[m_idx])}  %%\n")
                         f.writelines(f"[[exported_{self.now}/{page}{m_idx+1:03}|{m_idx+1}]]      {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
             self.save_blocks(merged, base_path)
         else:
@@ -202,10 +208,10 @@ class WebToMarkdownApp(QWidget):
         if not self.range_input.text().strip():
             return [[block.strip()] for block in blocks]
 
-        page_groups = self.parse_page_groups(self.range_input.text())
+        self.page_groups = self.parse_page_groups(self.range_input.text())
         merged = []
 
-        for group in page_groups:
+        for group in self.page_groups:
             merged_group = []
             for i in group:
                 if 1 <= i <= len(blocks):
@@ -223,20 +229,24 @@ class WebToMarkdownApp(QWidget):
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
         keywords = self.convert_tags(keywords)
-        # pprint(keywords)
+        pprint(keywords)
         # print(keywords)
         for idx, group in enumerate(merged_blocks):
             content = "\n\n".join(group)
             filename = f"{page}{idx+1:03}.md"
-            prev_link = f"[[exported_{self.now}/{page}{idx:03}|{page}{idx:03}]]"+" "*20 if idx > 0 else ""
-            header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*20
-            next_link = f"[[exported_{self.now}/{page}{idx+2:03}|{page}{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
-            range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+            prev_link = f"[[exported_{self.now}/{page}{idx:03}|{page}{idx:03}]]  <"+" "*10 if idx > 0 else ""
+            header_link = f"[[exported_{self.now}/headers.md|headers]]"+" "*10
+            next_link = f">  [[exported_{self.now}/{page}{idx+2:03}|{page}{idx+2:03}]]" if idx < len(merged_blocks) - 1 else ""
+            # range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+
+            range_info = f"\n%%  Запросы:  {', '.join(str(x) for x in self.page_groups[idx])}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
 
             tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
             # tags = [f"#{word[1]}" for word in keywords if word[0] in content]
             tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
+
             full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
 
             with open(os.path.join(base_path, filename), "w", encoding="utf-8") as f:
