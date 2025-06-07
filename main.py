@@ -97,8 +97,8 @@ class GPTToMarkdownApp(QWidget):
 
         group_layout_pages.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех каждого запроса, как отдельной страницы"))
         group_layout_pages.addWidget(QLabel("Пример диапазонов (группировки, пересечения и обратные последовательности возможны):    (1,4),5,(8,11-13),15-18,6-9,12,7-5"))
-        group_layout_pages.addWidget(self.unique_sort_cb)
         group_layout_pages.addWidget(self.range_input)
+        group_layout_pages.addWidget(self.unique_sort_cb)
 
         group_layout_export.addLayout(page_row)
         group_layout_export.addWidget(QLabel())
@@ -128,6 +128,7 @@ class GPTToMarkdownApp(QWidget):
         self.choose_btn.clicked.connect(self.choose_folder)
         self.save_btn.clicked.connect(self.save)
         self.split_pages_cb.stateChanged.connect(self.on_checkbox_toggled)
+        self.range_input.textChanged.connect(self.on_range_input_change)
 
         # set settings from config
         default_save_path = self.config.get("Settings", "default_save_path", fallback=".")
@@ -140,10 +141,17 @@ class GPTToMarkdownApp(QWidget):
 
         self.activate_all_widgets(self, False)
 
+    def on_range_input_change(self):
+        if self.range_input.text().strip():
+            self.unique_sort_cb.setEnabled(True)
+        else:
+            self.unique_sort_cb.setEnabled(False)
+            self.unique_sort_cb.setChecked(False)
+
     def on_checkbox_toggled(self, checked: bool):
         if checked:
             self.range_input.setEnabled(True)
-            self.unique_sort_cb.setEnabled(True)
+            # self.unique_sort_cb.setEnabled(True)
             self.page_name_template.setEnabled(True)
             self.start_page_number_input.setEnabled(True)
         else:
