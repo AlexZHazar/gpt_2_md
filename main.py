@@ -323,6 +323,8 @@ class GPTToMarkdownApp(QWidget):
             # with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
             with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
                 f.writelines('\n')
+                f.writelines('**Source file:**   _' + self.file_path + '_\n')
+                f.writelines('\n')
                 for idx, block in enumerate(blocks):
                     # blocks[idx] = "№ "+str(idx+1)+"\n"+block
                     blocks[idx] = "%%  "+str(idx+rqn)+"  %%\n"+block
@@ -334,6 +336,8 @@ class GPTToMarkdownApp(QWidget):
             if self.range_input.text().strip():
                 # with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
                 with open(os.path.join(base_path, f"headers.md"), "w", encoding="utf-8") as f:
+                    f.writelines('\n')
+                    f.writelines('**Source file:**   _' + self.file_path + '_\n')
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
                         try:
@@ -350,6 +354,9 @@ class GPTToMarkdownApp(QWidget):
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
             with open(file_path, "w", encoding="utf-8") as f:
+                f.writelines('\n')
+                f.writelines('**Source file:**   _' + self.file_path + '_\n')
+                f.writelines('\n')
                 f.write(self.md_text)
             file_path = file_path.replace('\\', '/')
             QMessageBox.information(self, "Готово", f"Сохранено в: {file_path}")
