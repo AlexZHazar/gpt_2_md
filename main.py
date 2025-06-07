@@ -68,7 +68,7 @@ class GPTToMarkdownApp(QWidget):
 
         self.config = load_config()
 
-        self.load_file_button = QPushButton("Открыть MHTML файл")
+        self.load_file_btn = QPushButton("Открыть MHTML файл")
         self.mhtml_path_label = QLabel("")
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
@@ -78,7 +78,24 @@ class GPTToMarkdownApp(QWidget):
         self.path_label = QLabel("Путь не выбран")
         self.choose_btn = QPushButton("Указать папку сохранения")
         self.save_btn = QPushButton("Сохранить")
+        self.save_label = QLabel()
         self.unique_sort_cb = QCheckBox("Сортировать и удалить дубликаты внутри страницы")
+
+        button_height = 40
+        self.load_file_btn.setFixedHeight(button_height)
+        self.choose_btn.setFixedHeight(button_height)
+        self.save_btn.setFixedHeight(button_height)
+
+        load_button_row = QHBoxLayout()
+        load_button_row.addWidget(self.load_file_btn, 5)
+        load_button_row.addWidget(QLabel(), 1)
+        load_button_row.addWidget(self.choose_btn, 5)
+
+        load_label_row = QHBoxLayout()
+        load_label_row.addWidget(self.mhtml_path_label, 5)
+        load_label_row.addWidget(QLabel(), 1)
+        load_label_row.addWidget(self.path_label, 5)
+
 
         page_row = QHBoxLayout()
         page_row.addWidget(self.split_pages_cb, 1)
@@ -108,8 +125,10 @@ class GPTToMarkdownApp(QWidget):
         group_layout_export.addWidget(group_box_pages)
 
         self.layout = QVBoxLayout()
-        self.layout.addWidget(self.load_file_button)
+        self.layout.addWidget(self.load_file_btn)
         self.layout.addWidget(self.mhtml_path_label)
+        # self.layout.addLayout(load_button_row)
+        # self.layout.addLayout(load_label_row)
 
         self.layout.addWidget(QLabel())
 
@@ -119,11 +138,15 @@ class GPTToMarkdownApp(QWidget):
 
         self.layout.addWidget(self.path_label)
         self.layout.addWidget(self.choose_btn)
+
+        self.layout.addWidget(QLabel())
+
+        self.layout.addWidget(self.save_label)
         self.layout.addWidget(self.save_btn)
 
         self.setLayout(self.layout)
 
-        self.load_file_button.clicked.connect(self.handle_mhtml)
+        self.load_file_btn.clicked.connect(self.handle_mhtml)
 
         self.choose_btn.clicked.connect(self.choose_folder)
         self.save_btn.clicked.connect(self.save)
@@ -135,6 +158,7 @@ class GPTToMarkdownApp(QWidget):
 
         self.export_path = default_save_path
         self.path_label.setText("Путь к проекту Obsidian: "+default_save_path)
+        # self.path_label.setText(default_save_path)
 
         self.load_path = self.config.get("Settings", "default_load_path", fallback=".")
         self.request_md_tag = self.config.get("Settings", "request_md_tag", fallback=".")
@@ -164,7 +188,7 @@ class GPTToMarkdownApp(QWidget):
     def activate_all_widgets(self, parent: QWidget, status: bool = True):
         for widget in parent.findChildren(QWidget, options=Qt.FindChildrenRecursively):
             widget.setEnabled(status)
-            self.load_file_button.setEnabled(True)
+            self.load_file_btn.setEnabled(True)
         if status:
             self.range_input.setEnabled(False)
             self.unique_sort_cb.setEnabled(False)
@@ -179,6 +203,7 @@ class GPTToMarkdownApp(QWidget):
         if folder:
             self.export_path = folder
             self.path_label.setText("Путь к проекту Obsidian: "+folder)
+            # self.path_label.setText(folder)
             self.config.set("Settings", "default_save_path", folder)
             save_config(self.config)
 
@@ -295,6 +320,7 @@ class GPTToMarkdownApp(QWidget):
                 f.write(self.md_text)
             file_path = file_path.replace('\\', '/')
             QMessageBox.information(self, "Готово", f"Сохранено в: {file_path}")
+            self.save_label.setText(f"Сохранено в: {file_path}")
 
     def split_text(self, text):
         text = re.sub(fr'[>] \[!{self.request_md_tag}\] Запрос:', 's'*50+fr'> [!{self.request_md_tag}] Запрос:', text, flags=re.DOTALL | re.MULTILINE)
@@ -365,6 +391,7 @@ class GPTToMarkdownApp(QWidget):
         QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
         QMessageBox.warning(self, "Важно", "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
                             "\n\nЛучше закрыть/открыть Obsidian проект заново")
+        self.save_label.setText(f"Сохранено в: {base_path}")
 
     def handle_mhtml(self):
         self.file_path, _ = QFileDialog.getOpenFileName(
@@ -426,6 +453,7 @@ class GPTToMarkdownApp(QWidget):
             return
 
         self.save_as_markdown(html_content)
+        self.save_label.setText("")
 
     def save_as_markdown(self, html_content: str):
 
@@ -549,6 +577,6 @@ if __name__ == "__main__":
     app.setWindowIcon(icon)  # ✅ ВАЖНО: для панели задач
     window = GPTToMarkdownApp()
     # window.resize(600, 250)
-    window.setFixedSize(1000, 500)
+    window.setFixedSize(1000, 600)
     window.show()
     sys.exit(app.exec())
