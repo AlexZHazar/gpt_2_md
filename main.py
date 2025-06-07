@@ -293,7 +293,8 @@ class GPTToMarkdownApp(QWidget):
             with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
                 f.writelines('\n')
                 for idx, block in enumerate(blocks):
-                    blocks[idx] = "№ "+str(idx+1)+"\n"+block
+                    # blocks[idx] = "№ "+str(idx+1)+"\n"+block
+                    blocks[idx] = "%%  "+str(idx+1)+"  %%\n"+block
                     # f.writelines(f"[[{folder_path}{page} {idx+spn:03}|{idx+spn}]]     запрос №   {idx + 1}\n{self.get_line(block)}"+"\n"*2)
                     # f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n_запрос №_   {idx + 1}\n{self.get_line(block)}"+"\n"*2)
                     f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n{idx + 1}\n{self.get_line(block)}"+"\n"*2)
