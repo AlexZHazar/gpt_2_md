@@ -70,7 +70,7 @@ class GPTToMarkdownApp(QWidget):
         self.now = None
         self.page_groups = []
 
-        self.setWindowTitle("MHTML → Markdown")
+        self.setWindowTitle("ChatGPT MHTML → Obsidian Markdown")
         self.setWindowIcon(load_icon_from_base64())
 
         self.config = load_config()
