@@ -18,7 +18,7 @@ words =
     ...
 ~~~
 
-mapping is necassary to support md tags:
+mapping is necessary to support md tags:
 
 e.g. tag = "Apache/Pulsar" => HIERARCHICAL tag applied for original value "Pulsar"
 e.g. tag = "ad-hoc"        => as is of                     original value "ad-hoc"

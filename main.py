@@ -78,7 +78,7 @@ class GPTToMarkdownApp(QWidget):
         self.path_label = QLabel("Путь не выбран")
         self.choose_btn = QPushButton("Указать папку сохранения")
         self.save_btn = QPushButton("Сохранить")
-
+        self.unique_sort_cb = QCheckBox("Сортировать и удалить дубликаты внутри страницы")
 
         page_row = QHBoxLayout()
         page_row.addWidget(self.split_pages_cb, 1)
@@ -92,11 +92,12 @@ class GPTToMarkdownApp(QWidget):
         group_layout_export = QVBoxLayout(group_box_export)
 
         # === Группа "Выбор страниц"
-        group_box_pages = QGroupBox("Укажите номера страниц (реальные), которые нужно сохранить")
+        group_box_pages = QGroupBox("Укажите номера запросов (реальные), которые нужно сохранить")
         group_layout_pages = QVBoxLayout(group_box_pages)
 
-        group_layout_pages.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех страниц"))
-        group_layout_pages.addWidget(QLabel("Пример диапазонов (группировка и пересечения возможны):    (1,4),5,(8,11-13),15-18,6-9"))
+        group_layout_pages.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех каждого запроса, как отдельной страницы"))
+        group_layout_pages.addWidget(QLabel("Пример диапазонов (группировки, пересечения и обратные последовательности возможны):    (1,4),5,(8,11-13),15-18,6-9,12,7-5"))
+        group_layout_pages.addWidget(self.unique_sort_cb)
         group_layout_pages.addWidget(self.range_input)
 
         group_layout_export.addLayout(page_row)
@@ -128,22 +129,26 @@ class GPTToMarkdownApp(QWidget):
         self.save_btn.clicked.connect(self.save)
         self.split_pages_cb.stateChanged.connect(self.on_checkbox_toggled)
 
-        # set default path from config
+        # set settings from config
         default_save_path = self.config.get("Settings", "default_save_path", fallback=".")
-        default_load_path = self.config.get("Settings", "default_load_path", fallback=".")
+
         self.export_path = default_save_path
-        self.load_path = default_load_path
         self.path_label.setText("Путь к проекту Obsidian: "+default_save_path)
+
+        self.load_path = self.config.get("Settings", "default_load_path", fallback=".")
+        self.request_md_tag = self.config.get("Settings", "request_md_tag", fallback=".")
 
         self.activate_all_widgets(self, False)
 
     def on_checkbox_toggled(self, checked: bool):
         if checked:
             self.range_input.setEnabled(True)
+            self.unique_sort_cb.setEnabled(True)
             self.page_name_template.setEnabled(True)
             self.start_page_number_input.setEnabled(True)
         else:
             self.range_input.setEnabled(False)
+            self.unique_sort_cb.setEnabled(False)
             self.page_name_template.setEnabled(False)
             self.start_page_number_input.setEnabled(False)
         # print("✅" if checked else "❌")
@@ -154,10 +159,12 @@ class GPTToMarkdownApp(QWidget):
             self.load_file_button.setEnabled(True)
         if status:
             self.range_input.setEnabled(False)
+            self.unique_sort_cb.setEnabled(False)
             self.page_name_template.setEnabled(False)
             self.start_page_number_input.setEnabled(False)
             self.start_page_number_input.clear()
             self.range_input.clear()
+            self.unique_sort_cb.setChecked(False)
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Укажите путь к проекту Obsidian", self.export_path)
@@ -167,12 +174,14 @@ class GPTToMarkdownApp(QWidget):
             self.config.set("Settings", "default_save_path", folder)
             save_config(self.config)
 
-    @staticmethod
-    def parse_page_groups(text: str) -> list[list[int]]:
+    def parse_page_groups(self, text: str):
+        unigue_sorted = self.unique_sort_cb.isChecked()
         text = text.replace(' ', '')
         groups = []
+        groups_set = []
+        groups_list = []
 
-        # Поиск скобочных групп
+        # Поиск скобочных групп и одиночных элементов
         pattern = r'\((.*?)\)|([^,()]+)'
         matches = re.findall(pattern, text)
 
@@ -180,20 +189,48 @@ class GPTToMarkdownApp(QWidget):
             raw = group_str if group_str else single
             items = raw.split(',')
 
-            group = set()
+            group_set = set()
+            group_list = []
             for item in items:
                 if '-' in item:
                     start, end = item.split('-')
-                    group.update(range(int(start), int(end) + 1))
+                    try:
+                        int(start)  # Проверка, что start может быть преобразован в int
+                        int(end)    # Проверка, что end может быть преобразован в int
+                    except ValueError:
+                        QMessageBox.critical(self, "Ошибка",
+                                             f"Некорректный диапазон:  {start}-{end} . Проверьте формат ввода.")
+                        raise
+                    # print(start, end)
+                    if int(start) > int(end):
+                        group_set.update(range(int(start), int(end) - 1, -1))
+                        group_list.extend(range(int(start), int(end) - 1, -1))
+                    else:
+                        group_set.update(range(int(start), int(end) + 1))
+                        group_list.extend(range(int(start), int(end) + 1))
                 elif item:
-                    group.add(int(item))
-            groups.append(sorted(group))
+                    try:
+                        int(item)  # Проверка, что item может быть преобразован в int
+                    except ValueError:
+                        QMessageBox.critical(self, "Ошибка",
+                                             f"Некорректный номер запроса: {item}. Проверьте формат ввода.")
+                        raise
+                    group_set.add(int(item))
+                    group_list.append(int(item))
 
-        # groups_enum = list(enumerate(groups))
+            groups.append(raw)
+            groups_set.append(sorted(group_set))
+            groups_list.append(group_list)
+
+        # print(unigue_sorted)
+        # print(groups_set)
+        # print(groups_list)
         # print(groups)
-        # print(groups_enum)
 
-        return groups
+        if unigue_sorted:
+            return groups_set, groups
+        else:
+            return groups_list, groups
 
     @staticmethod
     def get_line(text: str, line_n: int = 2, max_length: int = 80) -> str:
@@ -213,6 +250,7 @@ class GPTToMarkdownApp(QWidget):
         # print(spn)
         page = self.page_name_template.text()
         page = 'page' if page.strip()=='' else page
+        self.page_name_template.setText(page)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
         if self.split_pages_cb.isChecked():
@@ -232,10 +270,16 @@ class GPTToMarkdownApp(QWidget):
                 with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
-                        f.writelines(f"%%  Запросы:  {', '.join(str(x) for x in self.page_groups[m_idx])}  %%\n")
-                        # f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}|{m_idx+spn}]]     запрос №   {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
-                        # f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n_запрос №_   {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
-                        f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n{m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                        try:
+                            # f.writelines(f"%%  Запросы:  {', '.join(str(x) for x in self.page_groups[m_idx])}  %%\n")
+                            # f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}|{m_idx+spn}]]     запрос №   {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                            # f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n_запрос №_   {m_idx + 1}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                            f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n{', '.join(str(x) for x in self.page_groups[m_idx])}\n{self.get_line(m_block[0], 3)}"+"\n"*2)
+                        except IndexError:
+                            _, page_err = self.parse_page_groups(self.range_input.text())
+                            QMessageBox.critical(self, "Ошибка",
+                                                 f"Указан несуществующий номер запроса для страницы: [{page_err[m_idx]}]")
+                            raise
             self.save_blocks(merged, base_path)
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
@@ -245,21 +289,24 @@ class GPTToMarkdownApp(QWidget):
             QMessageBox.information(self, "Готово", f"Сохранено в: {file_path}")
 
     def split_text(self, text):
-        text = re.sub(r'[>] \[!important\] Запрос:', 's'*50+'> [!important] Запрос:', text, flags=re.DOTALL | re.MULTILINE)
+        text = re.sub(fr'[>] \[!{self.request_md_tag}\] Запрос:', 's'*50+fr'> [!{self.request_md_tag}] Запрос:', text, flags=re.DOTALL | re.MULTILINE)
         return re.split('s'*50, text)[1:]
 
     def merge_blocks(self, blocks: list[str]) -> list[list[str]]:
         if not self.range_input.text().strip():
             return [[block.strip()] for block in blocks]
 
-        self.page_groups = self.parse_page_groups(self.range_input.text())
+        self.page_groups, _page_err = self.parse_page_groups(self.range_input.text())
         merged = []
 
-        for group in self.page_groups:
+        for id, group in enumerate(self.page_groups):
             merged_group = []
             for i in group:
                 if 1 <= i <= len(blocks):
                     merged_group.append(blocks[i - 1].strip())
+                else:
+                    QMessageBox.critical(self, "Ошибка", f"Искомый запрос {i} [{_page_err[id]}] вне допустимого диапазона 1-{len(blocks)}")
+                    raise
             merged.append(merged_group)
 
         return merged
@@ -411,11 +458,10 @@ class GPTToMarkdownApp(QWidget):
         self.split_pages_cb.setChecked(False)
         self.activate_all_widgets(self, True)
 
-    @staticmethod
-    def my_massage_format(text: str) -> str:
+    def my_massage_format(self, text: str) -> str:
 
         text = re.sub(r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
-                      r"""> [!important] Запрос:
+                      fr"""> [!{self.request_md_tag}] Запрос:
     > \1
     """, text, flags=re.DOTALL)
 
@@ -463,9 +509,8 @@ class GPTToMarkdownApp(QWidget):
             text = text.replace(r[0], r[1])
         return text
 
-    @staticmethod
-    def fix_text_regexp(text):
-        text = re.sub(r'^.*?(?=>\s*\[!important\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
+    def fix_text_regexp(self, text):
+        text = re.sub(fr'^.*?(?=>\s*\[!{self.request_md_tag}\]\s*Запрос:)', '\n', text, flags=re.DOTALL)
         text = re.sub(r'^\|', '-|', text, flags=re.MULTILINE)
         return text
 
