@@ -6,15 +6,8 @@ pip install --upgrade PyInstaller pyinstaller-hooks-contrib
 
 pyinstaller --windowed --onefile --name "ChatGPT to Obsidian" main.py --icon=ChatGPT_Obsidian.ico
 """
+
 import base64
-
-"""
-Web to Markdown Converter using PySide6
-
-1. save ChatGPT conversations as MHTML
-2. convert MHTML to Markdown by this app
-
-"""
 import os
 import re
 import sys
@@ -70,7 +63,7 @@ class GPTToMarkdownApp(QWidget):
         self.now = None
         self.page_groups = []
 
-        self.setWindowTitle("MHTML → Markdown")
+        self.setWindowTitle("ChatGPT MHTML → Obsidian Markdown")
         self.setWindowIcon(load_icon_from_base64())
 
         self.config = load_config()
@@ -79,7 +72,6 @@ class GPTToMarkdownApp(QWidget):
         self.mhtml_path_label = QLabel("")
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
-        # self.start_page_number_label = QLabel("установить номер первой страницы:")
         self.start_page_number_input = QLineEdit()
         self.page_name_template = QLineEdit("page")
         self.range_input = QLineEdit()
@@ -94,13 +86,12 @@ class GPTToMarkdownApp(QWidget):
         page_row.addWidget(QLabel("Стартовый номер для именования страниц. Установите или оставьте пустым. По умолчаюнию = 1:"), 1)
         page_row.addWidget(self.start_page_number_input, 1)
         page_row.addWidget(QLabel(), 3)
-        # layout.addLayout(page_row)
 
         # === Группа "Параметры экспорта"
         group_box_export = QGroupBox("Параметры экспорта")
         group_layout_export = QVBoxLayout(group_box_export)
 
-        # === Группа "Параметры экспорта"
+        # === Группа "Выбор страниц"
         group_box_pages = QGroupBox("Укажите номера страниц (реальные), которые нужно сохранить")
         group_layout_pages = QVBoxLayout(group_box_pages)
 
