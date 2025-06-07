@@ -73,13 +73,16 @@ class GPTToMarkdownApp(QWidget):
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
         self.start_page_number_input = QLineEdit()
+
+        self.apply_start_query_number_cb = QCheckBox("Применить к запросам")
+
         self.page_name_template = QLineEdit("page")
         self.range_input = QLineEdit()
         self.path_label = QLabel("Путь не выбран")
         self.choose_btn = QPushButton("Указать папку сохранения")
         self.save_btn = QPushButton("Сохранить")
         self.save_label = QLabel()
-        self.unique_sort_cb = QCheckBox("Сортировать и удалить дубликаты внутри страницы")
+        self.unique_sort_cb = QCheckBox("Сортировать и удалить дубликаты запросов внутри страницы")
 
         button_height = 40
         self.load_file_btn.setFixedHeight(button_height)
@@ -99,9 +102,12 @@ class GPTToMarkdownApp(QWidget):
 
         page_row = QHBoxLayout()
         page_row.addWidget(self.split_pages_cb, 1)
-        page_row.addWidget(QLabel(), 1)
-        page_row.addWidget(QLabel("Стартовый номер для именования страниц. Установите или оставьте пустым. По умолчаюнию = 1:"), 1)
+        page_row.addWidget(QLabel(), 7)
+        # page_row.addWidget(QLabel("Стартовый номер для именования страниц. Установите или оставьте пустым. По умолчаюнию = 1:"), 1)
+        page_row.addWidget(QLabel("Стартовый номер для именования страниц (по умолчаюнию = 1):"), 1)
         page_row.addWidget(self.start_page_number_input, 1)
+        page_row.addWidget(QLabel(), 1)
+        page_row.addWidget(self.apply_start_query_number_cb, 1)
         page_row.addWidget(QLabel(), 3)
 
         # === Группа "Параметры экспорта"
@@ -147,11 +153,11 @@ class GPTToMarkdownApp(QWidget):
         self.setLayout(self.layout)
 
         self.load_file_btn.clicked.connect(self.handle_mhtml)
-
         self.choose_btn.clicked.connect(self.choose_folder)
         self.save_btn.clicked.connect(self.save)
         self.split_pages_cb.stateChanged.connect(self.on_checkbox_toggled)
         self.range_input.textChanged.connect(self.on_range_input_change)
+        self.start_page_number_input.textChanged.connect(self.on_start_page_number_input_change)
 
         # set settings from config
         default_save_path = self.config.get("Settings", "default_save_path", fallback=".")
@@ -165,12 +171,28 @@ class GPTToMarkdownApp(QWidget):
 
         self.activate_all_widgets(self, False)
 
+    def on_start_page_number_input_change(self):
+        if self.start_page_number_input.text().strip() not in ("1", ""):
+            self.apply_start_query_number_cb.setEnabled(True)
+        else:
+            self.apply_start_query_number_cb.setEnabled(False)
+            self.apply_start_query_number_cb.setChecked(False)
+
     def on_range_input_change(self):
-        if self.range_input.text().strip():
-            self.unique_sort_cb.setEnabled(True)
+        text = self.range_input.text().strip()
+        if text:
+            # self.unique_sort_cb.setEnabled(True)
+            self.apply_start_query_number_cb.setEnabled(False)
+            self.apply_start_query_number_cb.setChecked(False)
+            if '-' in text or '(' in text:
+                self.unique_sort_cb.setEnabled(True)
+            else:
+                self.unique_sort_cb.setEnabled(False)
         else:
             self.unique_sort_cb.setEnabled(False)
             self.unique_sort_cb.setChecked(False)
+            if self.start_page_number_input.text().strip() not in ("1", ""):
+                self.apply_start_query_number_cb.setEnabled(True)
 
     def on_checkbox_toggled(self, checked: bool):
         if checked:
@@ -178,11 +200,13 @@ class GPTToMarkdownApp(QWidget):
             # self.unique_sort_cb.setEnabled(True)
             self.page_name_template.setEnabled(True)
             self.start_page_number_input.setEnabled(True)
+            # self.apply_start_query_number_cb.setEnabled(True)
         else:
             self.range_input.setEnabled(False)
             self.unique_sort_cb.setEnabled(False)
             self.page_name_template.setEnabled(False)
             self.start_page_number_input.setEnabled(False)
+            self.apply_start_query_number_cb.setEnabled(False)
         # print("✅" if checked else "❌")
 
     def activate_all_widgets(self, parent: QWidget, status: bool = True):
@@ -194,9 +218,11 @@ class GPTToMarkdownApp(QWidget):
             self.unique_sort_cb.setEnabled(False)
             self.page_name_template.setEnabled(False)
             self.start_page_number_input.setEnabled(False)
+            self.apply_start_query_number_cb.setEnabled(False)
             self.start_page_number_input.clear()
             self.range_input.clear()
             self.unique_sort_cb.setChecked(False)
+            self.apply_start_query_number_cb.setChecked(False)
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Укажите путь к проекту Obsidian", self.export_path)
@@ -275,6 +301,10 @@ class GPTToMarkdownApp(QWidget):
     def save(self):
         # folder_path = f'exported_{self.now}/'
         folder_path = ''
+        if self.apply_start_query_number_cb.isChecked():
+            rqn = int(self.start_page_number_input.text().strip())
+        else:
+            rqn = 1
         try:
             spn = int(self.start_page_number_input.text().strip())
         except ValueError:
@@ -290,18 +320,20 @@ class GPTToMarkdownApp(QWidget):
             base_path = os.path.join(base_path, f"exported_{self.now}")
             os.makedirs(base_path, exist_ok=True)
             blocks = self.split_text(self.md_text)
-            with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
+            # with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
+            with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
                 f.writelines('\n')
                 for idx, block in enumerate(blocks):
                     # blocks[idx] = "№ "+str(idx+1)+"\n"+block
-                    blocks[idx] = "%%  "+str(idx+1)+"  %%\n"+block
+                    blocks[idx] = "%%  "+str(idx+rqn)+"  %%\n"+block
                     # f.writelines(f"[[{folder_path}{page} {idx+spn:03}|{idx+spn}]]     запрос №   {idx + 1}\n{self.get_line(block)}"+"\n"*2)
                     # f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n_запрос №_   {idx + 1}\n{self.get_line(block)}"+"\n"*2)
-                    f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n{idx + 1}\n{self.get_line(block)}"+"\n"*2)
+                    f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n{idx + rqn}\n{self.get_line(block)}"+"\n"*2)
 
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
-                with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
+                # with open(os.path.join(base_path, f"headers_{spn}.md"), "w", encoding="utf-8") as f:
+                with open(os.path.join(base_path, f"headers.md"), "w", encoding="utf-8") as f:
                     f.writelines('\n')
                     for m_idx, m_block in enumerate(merged):
                         try:
@@ -370,7 +402,8 @@ class GPTToMarkdownApp(QWidget):
             # print('='*100)
             filename = f"{page} {idx+spn:03}.md"
             prev_link = f"[[{folder_path}{page} {idx-1+spn:03}|{page} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
-            header_link = f"[[{folder_path}headers_{spn}|headers_{spn}]]"+" "*10
+            # header_link = f"[[{folder_path}headers_{spn}|headers_{spn}]]"+" "*10
+            header_link = f"[[{folder_path}headers|headers]]"+" "*10
             next_link = f">  [[{folder_path}{page} {idx+1+spn:03}|{page} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
             # range_info = f"\n%%  Запросы: {self.range_input.text().strip()}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
 
