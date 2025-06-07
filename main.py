@@ -107,7 +107,6 @@ class GPTToMarkdownApp(QWidget):
         page_row = QHBoxLayout()
         page_row.addWidget(self.split_pages_cb, 1)
         page_row.addWidget(QLabel(), 7)
-        # page_row.addWidget(QLabel("Стартовый номер для именования страниц. Установите или оставьте пустым. По умолчаюнию = 1:"), 1)
         page_row.addWidget(QLabel("Стартовый номер для именования страниц (по умолчаюнию = 1):"), 1)
         page_row.addWidget(self.start_page_number_input, 1)
         page_row.addWidget(QLabel(), 1)
@@ -612,7 +611,6 @@ if __name__ == "__main__":
     icon = load_icon_from_base64()
     app.setWindowIcon(icon)  # ✅ ВАЖНО: для панели задач
     window = GPTToMarkdownApp()
-    # window.resize(600, 250)
     window.setFixedSize(1000, 600)
     window.show()
     sys.exit(app.exec())
