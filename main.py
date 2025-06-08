@@ -307,7 +307,7 @@ class GPTToMarkdownApp(QWidget):
             self.start_page_number_input.setText("1")
         # print(spn)
         page = self.page_name_template.text().strip()
-        page = 'page' if page else page
+        page = 'page' if page == '' else page
         self.page_name_template.setText(page)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
@@ -376,8 +376,8 @@ class GPTToMarkdownApp(QWidget):
         except ValueError:
             spn = 1
             self.start_page_number_input.setText("1")
-        page = self.page_name_template.text()
-        page = 'page' if page.strip()=='' else page
+        page = self.page_name_template.text().strip()
+        page = 'page' if page == '' else page
         tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
 
         raw_value = self.config.get("Keywords", "words", fallback="")
