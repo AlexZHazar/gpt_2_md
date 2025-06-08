@@ -37,7 +37,7 @@ iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
 
 REQUEST_NUMBER_HEADER = r'# <span style="color:gray">_</span>'
 HIDE_HEADER = r'# <span style="color:green"> + </span>'
-HEADER_LINE_NUMBER = 4
+HEADER_LINE_NUMBER = 3
 
 
 def load_icon_from_base64():
@@ -284,7 +284,7 @@ class GPTToMarkdownApp(QWidget):
             return groups_list, groups
 
     @staticmethod
-    def get_line(text: str, line_n: int = HEADER_LINE_NUMBER - 1, max_length: int = 80) -> str:
+    def get_line(text: str, line_n: int = HEADER_LINE_NUMBER, max_length: int = 80) -> str:
         lines = text.splitlines()
         # print("-"*100)
         # print(lines[3])
@@ -330,7 +330,7 @@ class GPTToMarkdownApp(QWidget):
                     f.writelines(self.file_path + '\n\n---\n\n')
                     for m_idx, m_block in enumerate(merged):
                         try:
-                            f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n{', '.join(str(x) for x in self.page_groups[m_idx])}\n{self.get_line(m_block[0], HEADER_LINE_NUMBER)}" + "\n" * 2)
+                            f.writelines(f"[[{folder_path}{page} {m_idx+spn:03}]]\n{', '.join(str(x) for x in self.page_groups[m_idx])}\n{self.get_line(m_block[0])}" + "\n" * 2)
                         except IndexError:
                             _, page_err = self.parse_page_groups(self.range_input.text())
                             QMessageBox.critical(self, "Ошибка",
