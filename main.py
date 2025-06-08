@@ -327,7 +327,7 @@ class GPTToMarkdownApp(QWidget):
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
                 with open(os.path.join(base_path, f"headers.md"), "w", encoding="utf-8") as f:
-                    f.writelines(f'\n### <span style="color:green">Source file:</span>{file_name}\n')
+                    f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
                     f.writelines(self.file_path + '\n\n---\n\n')
                     for m_idx, m_block in enumerate(merged):
                         try:
@@ -341,7 +341,7 @@ class GPTToMarkdownApp(QWidget):
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
             with open(file_path, "w", encoding="utf-8") as f:
-                f.writelines(f'\n### <span style="color:green">Source file:</span>{file_name}\n')
+                f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
                 f.writelines(self.file_path + '\n\n---\n\n')
                 text = self.set_number_header(self.md_text)
                 f.write(text)
