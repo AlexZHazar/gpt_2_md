@@ -296,6 +296,7 @@ class GPTToMarkdownApp(QWidget):
     def save(self):
         # folder_path = f'exported_{self.now}/'
         folder_path = ''
+        file_name = os.path.splitext(os.path.basename(self.file_path))[0]
         if self.apply_start_query_number_cb.isChecked():
             rqn = int(self.start_page_number_input.text().strip())
         else:
@@ -317,7 +318,7 @@ class GPTToMarkdownApp(QWidget):
             blocks = re.split(REQUEST_NUMBER_HEADER, self.md_text)[1:]
 
             with open(os.path.join(base_path, "headers.md"), "w", encoding="utf-8") as f:
-                f.writelines('\n### <span style="color:green">Source file:</span>\n')
+                f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
                 f.writelines(self.file_path + '\n\n---\n\n')
                 for idx, block in enumerate(blocks):
                     blocks[idx] = REQUEST_NUMBER_HEADER.replace('_',str(idx+rqn))+block
@@ -326,7 +327,7 @@ class GPTToMarkdownApp(QWidget):
             merged = self.merge_blocks(blocks)
             if self.range_input.text().strip():
                 with open(os.path.join(base_path, f"headers.md"), "w", encoding="utf-8") as f:
-                    f.writelines('\n### <span style="color:green">Source file:</span>\n')
+                    f.writelines(f'\n### <span style="color:green">Source file:</span>{file_name}\n')
                     f.writelines(self.file_path + '\n\n---\n\n')
                     for m_idx, m_block in enumerate(merged):
                         try:
@@ -340,7 +341,7 @@ class GPTToMarkdownApp(QWidget):
         else:
             file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
             with open(file_path, "w", encoding="utf-8") as f:
-                f.writelines('\n### <span style="color:green">Source file:</span>\n')
+                f.writelines(f'\n### <span style="color:green">Source file:</span>{file_name}\n')
                 f.writelines(self.file_path + '\n\n---\n\n')
                 text = self.set_number_header(self.md_text)
                 f.write(text)
