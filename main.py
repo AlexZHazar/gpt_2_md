@@ -1,10 +1,10 @@
-# pip install PySide6 html2text requests chardet
+# pip install PySide6 html2text chardet
 
 """
 pip install PyInstaller
 pip install --upgrade PyInstaller pyinstaller-hooks-contrib
 
-pyinstaller --windowed --onefile --name "ChatGPT to Obsidian" main.py --icon=ChatGPT_Obsidian.ico
+pyinstaller --windowed --onefile --name "ChatGPT to Obsidian" main.py --icon=ChatGPT_Obsidian.ico --version-file=version.txt
 """
 
 import base64
@@ -67,43 +67,39 @@ class GPTToMarkdownApp(QWidget):
         self.now = None
         self.page_groups = []
 
+        self.config = load_config()
+
+        # main window setup
         self.setWindowTitle("ChatGPT MHTML → Obsidian Markdown")
         self.setWindowIcon(load_icon_from_base64())
 
-        self.config = load_config()
-
-        self.load_file_btn = QPushButton("Открыть MHTML файл")
+        # widgets setup
+        self.mhtml_load_file_btn = QPushButton("Открыть MHTML файл")
         self.mhtml_path_label = QLabel("")
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
         self.start_page_number_input = QLineEdit()
-
         self.apply_start_query_number_cb = QCheckBox("Применить к запросам")
 
         self.page_name_template = QLineEdit("page")
+
         self.range_input = QLineEdit()
-        self.path_label = QLabel("Путь не выбран")
-        self.choose_btn = QPushButton("Указать папку сохранения")
-        self.save_btn = QPushButton("Сохранить")
-        self.save_label = QLabel()
         self.unique_sort_cb = QCheckBox("Сортировать и удалить дубликаты запросов внутри страницы")
 
+        self.md_path_label = QLabel("Путь не выбран")
+        self.md_choose_btn = QPushButton("Указать папку сохранения")
+
+        self.save_label = QLabel()
+        self.save_btn = QPushButton("Сохранить")
+
+        # widget properties
         button_height = 40
-        self.load_file_btn.setFixedHeight(button_height)
-        self.choose_btn.setFixedHeight(button_height)
+        self.mhtml_load_file_btn.setFixedHeight(button_height)
+        self.md_choose_btn.setFixedHeight(button_height)
         self.save_btn.setFixedHeight(button_height)
 
-        load_button_row = QHBoxLayout()
-        load_button_row.addWidget(self.load_file_btn, 5)
-        load_button_row.addWidget(QLabel(), 1)
-        load_button_row.addWidget(self.choose_btn, 5)
-
-        load_label_row = QHBoxLayout()
-        load_label_row.addWidget(self.mhtml_path_label, 5)
-        load_label_row.addWidget(QLabel(), 1)
-        load_label_row.addWidget(self.path_label, 5)
-
-
+        ## sub layouts
+        # sub layout for page options
         page_row = QHBoxLayout()
         page_row.addWidget(self.split_pages_cb, 1)
         page_row.addWidget(QLabel(), 7)
@@ -113,19 +109,17 @@ class GPTToMarkdownApp(QWidget):
         page_row.addWidget(self.apply_start_query_number_cb, 1)
         page_row.addWidget(QLabel(), 3)
 
-        # === Группа "Параметры экспорта"
-        group_box_export = QGroupBox("Параметры экспорта")
-        group_layout_export = QVBoxLayout(group_box_export)
-
-        # === Группа "Выбор страниц"
+        # sub layout for range input
         group_box_pages = QGroupBox("Укажите номера запросов (реальные), которые нужно сохранить")
         group_layout_pages = QVBoxLayout(group_box_pages)
-
         group_layout_pages.addWidget(QLabel("Оставьте поле ниже пустым для формирования всех каждого запроса, как отдельной страницы"))
         group_layout_pages.addWidget(QLabel("Пример диапазонов (группировки, пересечения и обратные последовательности возможны):    (1,4),5,(8,11-13),15-18,6-9,12,7-5"))
         group_layout_pages.addWidget(self.range_input)
         group_layout_pages.addWidget(self.unique_sort_cb)
 
+        # sub layout for export options
+        group_box_export = QGroupBox("Параметры экспорта")
+        group_layout_export = QVBoxLayout(group_box_export)
         group_layout_export.addLayout(page_row)
         group_layout_export.addWidget(QLabel())
         group_layout_export.addWidget(QLabel("Укажите шаблон имени страницы по правилам именования файлов:"))
@@ -133,42 +127,44 @@ class GPTToMarkdownApp(QWidget):
         group_layout_export.addWidget(QLabel())
         group_layout_export.addWidget(group_box_pages)
 
+        # main layout
         self.layout = QVBoxLayout()
-        self.layout.addWidget(self.load_file_btn)
+        self.layout.addWidget(self.mhtml_load_file_btn)
         self.layout.addWidget(self.mhtml_path_label)
-
+        #
         self.layout.addWidget(QLabel())
-
+        #
         self.layout.addWidget(group_box_export)
-
+        #
         self.layout.addWidget(QLabel())
-
-        self.layout.addWidget(self.path_label)
-        self.layout.addWidget(self.choose_btn)
-
+        #
+        self.layout.addWidget(self.md_path_label)
+        self.layout.addWidget(self.md_choose_btn)
+        #
         self.layout.addWidget(QLabel())
-
+        #
         self.layout.addWidget(self.save_label)
         self.layout.addWidget(self.save_btn)
-
+        #
         self.setLayout(self.layout)
 
-        self.load_file_btn.clicked.connect(self.handle_mhtml)
-        self.choose_btn.clicked.connect(self.choose_folder)
+        # event connections
+        self.mhtml_load_file_btn.clicked.connect(self.handle_mhtml)
+        self.md_choose_btn.clicked.connect(self.choose_folder)
         self.save_btn.clicked.connect(self.save)
         self.split_pages_cb.stateChanged.connect(self.on_checkbox_toggled)
         self.range_input.textChanged.connect(self.on_range_input_change)
         self.start_page_number_input.textChanged.connect(self.on_start_page_number_input_change)
 
-        # set settings from config
-        default_save_path = self.config.get("Settings", "default_save_path", fallback=".")
-
-        self.export_path = default_save_path
-        self.path_label.setText("Путь к проекту Obsidian: "+default_save_path)
-
+        # get settings from config.ini
+        self.export_path = self.config.get("Settings", "default_save_path", fallback=".")
         self.load_path = self.config.get("Settings", "default_load_path", fallback=".")
         self.request_md_tag = self.config.get("Settings", "request_md_tag", fallback=".")
 
+        # set initial values
+        self.md_path_label.setText("Путь к проекту Obsidian: " + self.export_path)
+
+        # set initial state
         self.activate_all_widgets(self, False)
 
     def on_start_page_number_input_change(self):
@@ -209,7 +205,7 @@ class GPTToMarkdownApp(QWidget):
     def activate_all_widgets(self, parent: QWidget, status: bool = True):
         for widget in parent.findChildren(QWidget, options=Qt.FindChildrenRecursively):
             widget.setEnabled(status)
-            self.load_file_btn.setEnabled(True)
+            self.mhtml_load_file_btn.setEnabled(True)
         if status:
             self.range_input.setEnabled(False)
             self.unique_sort_cb.setEnabled(False)
@@ -225,7 +221,7 @@ class GPTToMarkdownApp(QWidget):
         folder = QFileDialog.getExistingDirectory(self, "Укажите путь к проекту Obsidian", self.export_path)
         if folder:
             self.export_path = folder
-            self.path_label.setText("Путь к проекту Obsidian: "+folder)
+            self.md_path_label.setText("Путь к проекту Obsidian: " + folder)
             self.config.set("Settings", "default_save_path", folder)
             save_config(self.config)
 
@@ -236,7 +232,7 @@ class GPTToMarkdownApp(QWidget):
         groups_set = []
         groups_list = []
 
-        # Поиск скобочных групп и одиночных элементов
+        # Search for bracketed groups and single elements
         pattern = r'\((.*?)\)|([^,()]+)'
         matches = re.findall(pattern, text)
 
@@ -250,8 +246,8 @@ class GPTToMarkdownApp(QWidget):
                 if '-' in item:
                     start, end = item.split('-')
                     try:
-                        int(start)  # Проверка, что start может быть преобразован в int
-                        int(end)    # Проверка, что end может быть преобразован в int
+                        int(start)
+                        int(end)
                     except ValueError:
                         QMessageBox.critical(self, "Ошибка",
                                              f"Некорректный диапазон:  {start}-{end} . Проверьте формат ввода.")
@@ -265,7 +261,7 @@ class GPTToMarkdownApp(QWidget):
                         group_list.extend(range(int(start), int(end) + 1))
                 elif item:
                     try:
-                        int(item)  # Проверка, что item может быть преобразован в int
+                        int(item)
                     except ValueError:
                         QMessageBox.critical(self, "Ошибка",
                                              f"Некорректный номер запроса: {item}. Проверьте формат ввода.")
@@ -310,8 +306,8 @@ class GPTToMarkdownApp(QWidget):
             spn = 1
             self.start_page_number_input.setText("1")
         # print(spn)
-        page = self.page_name_template.text()
-        page = 'page' if page.strip()=='' else page
+        page = self.page_name_template.text().strip()
+        page = 'page' if page else page
         self.page_name_template.setText(page)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
@@ -324,7 +320,7 @@ class GPTToMarkdownApp(QWidget):
                 f.writelines('\n### <span style="color:green">Source file:</span>\n')
                 f.writelines(self.file_path + '\n\n---\n\n')
                 for idx, block in enumerate(blocks):
-                    blocks[idx] = REQUEST_NUMBER_HEADER.replace('_',str(idx+rqn))+"\n"+block
+                    blocks[idx] = REQUEST_NUMBER_HEADER.replace('_',str(idx+rqn))+block
                     f.writelines(f"[[{folder_path}{page} {idx+spn:03}]]\n{idx + rqn}\n{self.get_line(block)}"+"\n"*2)
 
             merged = self.merge_blocks(blocks)
@@ -352,9 +348,6 @@ class GPTToMarkdownApp(QWidget):
             QMessageBox.information(self, "Готово", f"Сохранено в: {file_path}")
             self.save_label.setText(f"Сохранено в: {file_path}")
 
-    def split_text(self, text):
-        return re.split(REQUEST_NUMBER_HEADER, text)[1:]
-
     def merge_blocks(self, blocks: list[str]) -> list[list[str]]:
         if not self.range_input.text().strip():
             return [[block.strip()] for block in blocks]
@@ -368,7 +361,8 @@ class GPTToMarkdownApp(QWidget):
                 if 1 <= i <= len(blocks):
                     merged_group.append(blocks[i - 1].strip())
                 else:
-                    QMessageBox.critical(self, "Ошибка", f"Искомый запрос {i} [{_page_err[idg]}] вне допустимого диапазона 1-{len(blocks)}")
+                    QMessageBox.critical(self, "Ошибка",
+                                         f"Искомый запрос {i} [{_page_err[idg]}] вне допустимого диапазона 1-{len(blocks)}")
                     raise
             merged.append(merged_group)
 
@@ -428,7 +422,7 @@ class GPTToMarkdownApp(QWidget):
 
             html_content = None
 
-            # Ищем HTML-часть
+            # Looking for the HTML part
             if msg.is_multipart():
                 parts = msg.iter_parts()
             else:
@@ -436,19 +430,19 @@ class GPTToMarkdownApp(QWidget):
 
             for part in parts:
                 if part.get_content_type() == "text/html":
-                    # Считываем raw payload без декодирования
+                    # Read raw payload without decoding
                     raw = part.get_payload(decode=False)
                     transfer_encoding = (part.get('Content-Transfer-Encoding') or '').lower()
                     charset = part.get_content_charset()
 
-                    # Декодируем quoted-printable, если нужно
+                    # Decode quoted-printable if needed
                     if transfer_encoding == 'quoted-printable':
                         raw_bytes = quopri.decodestring(raw)
                     else:
-                        # decode=True автоматически обработает base64, 7bit, etc.
+                        # decode=True automatically handles base64, 7bit, etc.
                         raw_bytes = part.get_payload(decode=True)
 
-                    # Пытаемся определить кодировку
+                    # Trying to determine the encoding
                     encoding_candidates = []
                     if charset:
                         encoding_candidates.append(charset)
@@ -461,13 +455,14 @@ class GPTToMarkdownApp(QWidget):
                         except UnicodeDecodeError:
                             continue
                     else:
-                        # В крайнем случае — автоопределение
+                        # As a last resort, autodetect
                         detection = chardet.detect(raw_bytes)
                         html_content = raw_bytes.decode(detection['encoding'] or 'utf-8', errors='replace')
 
                     break
 
             if not html_content:
+                QMessageBox.critical(self, "Ошибка", "HTML содержимое не найдено в .mhtml файле.")
                 raise ValueError("HTML содержимое не найдено в .mhtml файле.")
 
         except Exception as e:
@@ -536,11 +531,11 @@ class GPTToMarkdownApp(QWidget):
         )
 
         def process_table_block(match):
-            start = match.group(1)  # строка с ---|---|---
-            body = match.group(3)  # тело таблицы
-            end = match.group(4)  # конец таблицы
+            start = match.group(1)  # line with ---|---|---
+            body = match.group(3)  # table body
+            end = match.group(4)  # table end
 
-            # Разобьем тело на строки
+            # Split the body into strings
             lines = body.splitlines()
 
             processed_lines = []
@@ -548,7 +543,7 @@ class GPTToMarkdownApp(QWidget):
 
             for line in lines:
 
-                # Если строка не заканчивается на "  " — это обрыв строки
+                # If the line does not end with ‘ ’ - it is a line break
                 if not line.endswith("  "):
                     buffer_line += line + " "
                 else:
@@ -557,7 +552,7 @@ class GPTToMarkdownApp(QWidget):
                         processed_lines.append(buffer_line)
                     buffer_line = ""
 
-            # Склеим обратно через \n с сохранением start и end
+            # Glue back together via \n with start and end saved
             return start + "\n" + "\n".join(processed_lines) + "\n" + end
 
         return pattern.sub(process_table_block, text)
@@ -578,7 +573,7 @@ class GPTToMarkdownApp(QWidget):
     @staticmethod
     def fix_code_blocks(text):
         def replacer(match):
-            # Вырезаем содержимое блока и обрабатываем
+            # Cut out the content of the block and process this content
             code = match.group(2)
             # print(code)
             count = 4
@@ -609,7 +604,7 @@ class GPTToMarkdownApp(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     icon = load_icon_from_base64()
-    app.setWindowIcon(icon)  # ✅ ВАЖНО: для панели задач
+    app.setWindowIcon(icon)  # ✅ for the taskbar
     window = GPTToMarkdownApp()
     window.setFixedSize(1000, 600)
     window.show()
