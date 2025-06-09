@@ -235,24 +235,46 @@ class GPTToMarkdownApp(QWidget):
         return spn
 
     def parse_page_groups(self, text: str):
-        unigue_sorted = self.unique_sort_cb.isChecked()
-        text = text.replace(' ', '')
-        groups = []
-        groups_set = []
-        groups_list = []
+        """
+        Parses a string of page number groups and returns either unique sorted sets or ordered lists.
 
-        # Search for bracketed groups and single elements
+        The input string may contain comma-separated numbers and ranges (e.g., '1-3,5,(7,9-11)').
+        Parentheses indicate grouping of requests into one page.
+
+        Returns:
+            Tuple[List[List[int]], List[str]]:
+                - groups_set or groups_list: List of groups containing integers.
+                - groups: Corresponding raw group strings.
+
+        Raises:
+            ValueError: If a non-numeric value or invalid range is detected.
+        """
+        # whether the "unique sorted" checkbox is enabled
+        unigue_sorted = self.unique_sort_cb.isChecked()
+
+        # Remove all spaces from the input text
+        text = text.replace(' ', '')
+
+        # Final output containers:
+        groups = []  # String representations of groups (for display or debugging)
+        groups_set = []  # Lists of unique, sorted integers per group
+        groups_list = []  # Lists of integers in the order they appear (with duplicates)
+
+        # Regex pattern: match either a bracketed group (e.g. (1,2,3)) or a single element
         pattern = r'\((.*?)\)|([^,()]+)'
         matches = re.findall(pattern, text)
 
         for group_str, single in matches:
+            # Use the group in parentheses if found, otherwise use the single value
             raw = group_str if group_str else single
             items = raw.split(',')
 
-            group_set = set()
-            group_list = []
+            group_set = set()  # To store unique integers
+            group_list = []  # To store integers in order of appearance
+
             for item in items:
                 if '-' in item:
+                    # Handle a range like "5-8" or "10-7"
                     start, end = item.split('-')
                     try:
                         int(start)
@@ -261,278 +283,433 @@ class GPTToMarkdownApp(QWidget):
                         QMessageBox.critical(self, "Ошибка",
                                              f"Некорректный диапазон:  {start}-{end} . Проверьте формат ввода.")
                         raise
-                    # print(start, end)
+
+                    # Support both ascending and descending ranges
                     if int(start) > int(end):
                         group_set.update(range(int(start), int(end) - 1, -1))
                         group_list.extend(range(int(start), int(end) - 1, -1))
                     else:
                         group_set.update(range(int(start), int(end) + 1))
                         group_list.extend(range(int(start), int(end) + 1))
+
                 elif item:
+                    # Handle individual number
                     try:
                         int(item)
                     except ValueError:
                         QMessageBox.critical(self, "Ошибка",
                                              f"Некорректный номер запроса: {item}. Проверьте формат ввода.")
                         raise
+
                     group_set.add(int(item))
                     group_list.append(int(item))
 
-            groups.append(raw)
-            groups_set.append(sorted(group_set))
-            groups_list.append(group_list)
+            # Store processed group information
+            groups.append(raw)  # Original raw string for this group
+            groups_set.append(sorted(group_set))  # Unique, sorted version
+            groups_list.append(group_list)  # Full list with duplicates in input order
 
-        # print(unigue_sorted)
-        # print(groups_set)
-        # print(groups_list)
-        # print(groups)
-
+        # Return result based on checkbox state
         if unigue_sorted:
             return groups_set, groups
         else:
             return groups_list, groups
 
     def save(self):
+        """
+        Processes the current Markdown text, splits it into blocks based on headers,
+        and prepares each block for export with new headers and request IDs.
+
+        Generates page groups and passes them along with the processed content
+        to `merge_blocks()` and then to `save_blocks()` for writing to disk.
+        """
+        # Determine the starting request number
         if self.apply_start_request_number_cb.isChecked():
             rqn = int(self.start_page_number_input.text().strip())
         else:
             rqn = 1
+
+        # Get and sanitize the page name template
         page_template = self.page_name_template.text().strip()
         page_template = 'page' if page_template == '' else page_template
         self.page_name_template.setText(page_template)
+
+        # Get current timestamp and create base export directory
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = os.path.join(self.export_path, f"exported_{self.now}")
         os.makedirs(base_path, exist_ok=True)
-        md_text = re.sub(REQUEST_NUMBER_HEADER, 'x'*50+REQUEST_NUMBER_HEADER, self.md_text)
-        blocks = re.split('x'*50, md_text)[1:]
+
+        # Mark request headers with a unique delimiter to allow block splitting
+        md_text = re.sub(REQUEST_NUMBER_HEADER, 'x' * 50 + REQUEST_NUMBER_HEADER, self.md_text)
+
+        # Split the Markdown text into blocks based on the delimiter
+        blocks = re.split('x' * 50, md_text)[1:]  # Skip the first empty split
+
         for idx, block in enumerate(blocks):
+            # Replace placeholder in header with actual request number
             new_header = REQUEST_NUMBER_HEADER.replace('_', str(idx + rqn))
             text = block.replace(REQUEST_NUMBER_HEADER, new_header)
 
+            # Extract the first section after the header until the next header
             pattern = fr"({new_header}.*?)(?=\n#)"
             match = re.search(pattern, text, flags=re.DOTALL | re.MULTILINE)
 
-            request_item =  match.group(1).strip()
-            # print('-'*100, '\n', request_item)
+            request_item = match.group(1).strip()
+
+            # Replace the block with a structured triple: (full text, extracted header block, request number)
             blocks[idx] = ([text], [request_item], [idx + rqn])  # request_item+'\n\n---'
 
+        # Merge blocks and determine page grouping
         merged, page_groups = self.merge_blocks(blocks)
 
-        # for i in range(len(merged)):
-        #     print('-'*50+'\n', merged[i])
-
+        # Save all the resulting pages
         self.save_blocks(merged, base_path, page_groups)
 
     def merge_blocks(self, blocks):
+        """
+        Merges Markdown content blocks according to user-defined page group ranges.
 
+        Each group of blocks is combined into a single page. Request headers are modified
+        to include wiki-links with page numbers.
+
+        Args:
+            blocks (List[Tuple[List[str], List[str], List[int]]]):
+                A list of blocks, each containing text, header, and request number.
+
+        Returns:
+            Tuple[List[Tuple[List[str], List[str], List[int]]], List[List[int]]]:
+                - merged blocks
+                - associated request ID groups
+
+        Raises:
+            ValueError: If a requested index is out of the valid range.
+        """
+        # Regex pattern to find the gray-colored request number span
         pattern = r'(# <span style="color:gray">)\s*(\d+)\s*(</span>)'
+
+        # Get the base name for the page (used in wiki-style links)
         page_name = self.page_name_template.text()
 
+        # Get the starting page number (defined elsewhere, e.g. from user input)
         spn = self.get_start_page_number()
 
+        # Inner function to build a replacement function for re.sub
         def make_replacer(page_name, fixed_number=None):
             def replacer(match):
+                # Determine the page number: either fixed or taken from match
                 if fixed_number is not None:
                     page_number = fixed_number
                 else:
                     page_number = int(match.group(2))
+                # Create a wiki-style link with the padded number (e.g. 001)
                 return f'[[{page_name} {f"{page_number:03}"}{match.group(1)}{match.group(2)}{match.group(3)}|{match.group(2)}]]'
 
             return replacer
 
+        # Parse the page groups based on the user's input in the range field
         self.page_groups, _page_err = self.parse_page_groups(self.range_input.text())
 
+        # Determine page grouping strategy
         if not self.split_pages_cb.isChecked():
+            # If page splitting is disabled, treat all blocks as one group
             page_groups = [list(range(1, len(blocks) + 1))]
         elif not self.range_input.text().strip():
+            # If range input is empty, each block goes on its own page
             page_groups = [[i] for i in range(1, len(blocks) + 1)]
         else:
+            # Use user-defined page groups
             page_groups = self.page_groups
 
-        # print(page_groups)
         merged = []
 
+        # Process each group of blocks
         for idg, group in enumerate(page_groups):
-            merged_group = ([],[],[])
-            replacer = make_replacer(page_name, idg+spn)
+            merged_group = ([], [], [])  # (texts, headers, request numbers)
+
+            # Create a replacer function using current group page number
+            replacer = make_replacer(page_name, idg + spn)
+
             for i in group:
+                # Ensure the block number is within valid range
                 if 1 <= i <= len(blocks):
 
                     # [(['text1'],['header1'],[number1]),(['text2'],['header2'],[number2])]
                     # (['text1'],['header1'],[number1])
 
-                    merged_group[0].append(blocks[i - 1][0][0].strip())
-                    merged_group[2].append(blocks[i - 1][2][0])
+                    # Append the text (cleaned), number, and replaced header
+                    merged_group[0].append(blocks[i - 1][0][0].strip())  # Full text
+                    merged_group[2].append(blocks[i - 1][2][0])  # Request number
 
+                    # Apply link formatting to the request header
                     block = re.sub(pattern, replacer, blocks[i - 1][1][0].strip())
-                    merged_group[1].append(block)
-
+                    merged_group[1].append(block)  # Header with links
                 else:
+                    # If the block index is out of bounds — raise an error
                     QMessageBox.critical(self, "Ошибка",
                                          f"Искомый запрос {i} [{_page_err[idg]}] вне допустимого диапазона 1-{len(blocks)}")
                     raise
+
+            # Add processed group to the final merged result
             merged.append(merged_group)
 
+        # Return the merged result and the associated page groups
         return merged, self.page_groups
 
     def save_blocks(self, merged_blocks, base_path, page_groups):
+        """
+        Saves each group of merged Markdown blocks to separate files and writes
+        an index file listing request headers.
+
+        Adds navigation links and tags to each file based on keywords and configuration settings.
+
+        Args:
+            merged_blocks (List[Tuple[List[str], List[str], List[int]]]):
+                List of content groups to be saved.
+            base_path (str):
+                The directory path where the files will be saved.
+            page_groups (List[List[int]]):
+                The request ID groups assigned to each output page.
+        """
+        # Optional subfolder inside base_path (unused here)
         # folder_path = f'exported_{self.now}/'
         folder_path = ''
+
+        # Extract base file name without extension
         file_name = os.path.splitext(os.path.basename(self.file_path))[0]
+
+        # Starting page number from user-defined input or default
         spn = self.get_start_page_number()
+
+        # Page name template; fallback to 'page' if empty
         page_page_template = self.page_name_template.text().strip()
         page_page_template = 'page' if page_page_template == '' else page_page_template
+
+        # Number of tags per row when writing tag blocks
         tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
 
+        # Get keyword list from config and convert to tag format
         raw_value = self.config.get("Keywords", "words", fallback="")
         keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
         keywords = self.convert_tags(keywords)
 
         request_ids = []
+
+        # Open main request list file
         with open(os.path.join(base_path, f'{REQUEST_LIST_NAME}.md'), "w", encoding="utf-8") as headers_file:
+
+            # Write range_input comment if present
+            if self.range_input.text().strip():
+                headers_file.writelines(f'%%  Запросы:  {self.range_input.text().strip()}  %%')
+
             headers_file.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
             headers_file.writelines(self.file_path + '\n\n---')
 
+            # Iterate through each merged block to generate individual markdown files
             for idx, group in enumerate(merged_blocks):
-                content = "\n\n".join(group[0])
+                content = "\n\n".join(group[0])  # Combined request body text
+                headers = "\n\n".join(group[1])  # Combined headers text
 
-                headers = "\n\n".join(group[1])
+                # Handle request ID(s) depending on page grouping
                 if not page_groups and self.split_pages_cb.isChecked():
                     request_ids.append(group[2][0])
                 else:
                     request_ids = group[2]
+
+                # Turn request ID list into a string like "(1, 2, 3)" or "(5)"
                 request_id_list_str = str(tuple(request_ids)).replace(',)', ')')
 
+                # Prepend request ID as Markdown header if grouped pages are used
                 if page_groups:
                     headers = '# ' + request_id_list_str + '\n' + headers
 
-                # print(content)
-                # print(headers)
-                # print(request_id_list_str)
+                # Create output filename with padded index (e.g. "page 001.md")
+                filename = f"{page_page_template} {idx + spn:03}.md"
 
-                filename = f"{page_page_template} {idx+spn:03}.md"
-                prev_link = f"[[{folder_path}{page_page_template} {idx-1+spn:03}|{page_page_template} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
-                header_link = f"[[{folder_path}{REQUEST_LIST_NAME}|{REQUEST_LIST_NAME}]]"+" "*10
-                next_link = f">  [[{folder_path}{page_page_template} {idx+1+spn:03}|{page_page_template} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
-                range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+                # Build navigation links (previous, index, next)
+                prev_link = f"[[{folder_path}{page_page_template} {idx - 1 + spn:03}|{page_page_template} {idx - 1 + spn:03}]]  <" + " " * 10 if idx > 0 else ""
+                header_link = f"[[{folder_path}{REQUEST_LIST_NAME}|{REQUEST_LIST_NAME}]]" + " " * 10
+                next_link = f">  [[{folder_path}{page_page_template} {idx + 1 + spn:03}|{page_page_template} {idx + 1 + spn:03}]]" if idx < len(
+                    merged_blocks) - 1 else ""
+
+                # Show request ID range in a hidden block (Obsidian comment)
+                range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%',
+                                                                                                               '').strip() else ""
+
+                # Combine navigation into a Markdown block
                 nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
+
+                # Auto-tag based on keyword presence in content
                 tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
+
+                # Format tags into blocks of `tag_string_len` words
                 tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
 
+                # Combine final content for the markdown file
                 full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
 
+                # Write the page content to its respective Markdown file
                 with open(os.path.join(base_path, filename), "w", encoding="utf-8") as context_file:
                     context_file.write(full_text)
 
-                headers_file.write("\n\n"+headers)
+                # Append headers to the main index file
+                headers_file.write("\n\n" + headers)
 
-        # print(page_groups)
-
+        # Normalize path for display
         base_path = base_path.replace('\\', '/')
+
+        # Notify user of successful save
         QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
-        QMessageBox.warning(self, "Важно", "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
+
+        # Obsidian may need to be restarted to reflect new files
+        QMessageBox.warning(self, "Важно",
+                            "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
                             "\n\nЛучше закрыть/открыть Obsidian проект заново")
+
+        # Update status label in the UI
         self.save_label.setText(f"Сохранено в: {base_path}")
 
     def handle_mhtml(self):
+        """
+        Opens and parses an MHTML (.mhtml/.mht) file, extracts the HTML content,
+        detects its encoding, and converts it to Markdown.
+
+        Uses MIME parsing and encoding detection to robustly decode the HTML.
+        Then passes the decoded HTML to `convert_to_markdown()` for further processing.
+
+        Raises:
+            ValueError: If no HTML part is found in the MHTML file.
+            Displays QMessageBox on error.
+        """
+        # Open file dialog to select a .mhtml or .mht file
         self.file_path, _ = QFileDialog.getOpenFileName(
             self, "Открыть MHTML", self.load_path, "MHTML файлы (*.mhtml *.mht)"
         )
         if not self.file_path:
-            return
+            return  # User cancelled the dialog
 
         try:
+            # Read and parse the MHTML file using email-style parser
             with open(self.file_path, 'rb') as f:
                 msg = BytesParser(policy=policy.default).parse(f)
 
-            html_content = None
+            html_content = None  # Will store extracted HTML content
 
-            # Looking for the HTML part
+            # If the MHTML is multipart, iterate over parts; otherwise treat as single part
             if msg.is_multipart():
                 parts = msg.iter_parts()
             else:
                 parts = [msg]
 
+            # Iterate through each part of the MHTML
             for part in parts:
                 if part.get_content_type() == "text/html":
-                    # Read raw payload without decoding
+                    # Get raw HTML payload (not yet decoded)
                     raw = part.get_payload(decode=False)
                     transfer_encoding = (part.get('Content-Transfer-Encoding') or '').lower()
                     charset = part.get_content_charset()
 
-                    # Decode quoted-printable if needed
+                    # Decode quoted-printable content if specified
                     if transfer_encoding == 'quoted-printable':
                         raw_bytes = quopri.decodestring(raw)
                     else:
-                        # decode=True automatically handles base64, 7bit, etc.
+                        # decode=True automatically decodes common encodings like base64
                         raw_bytes = part.get_payload(decode=True)
 
-                    # Trying to determine the encoding
+                    # Build a list of encodings to try
                     encoding_candidates = []
                     if charset:
                         encoding_candidates.append(charset)
                     encoding_candidates += ['utf-8', 'windows-1251']
 
+                    # Try to decode the raw bytes using each candidate encoding
                     for encoding in encoding_candidates:
                         try:
                             html_content = raw_bytes.decode(encoding)
-                            break
+                            break  # Successfully decoded
                         except UnicodeDecodeError:
-                            continue
+                            continue  # Try next encoding
                     else:
-                        # As a last resort, autodetect
+                        # If all known encodings fail, use chardet to detect encoding
                         detection = chardet.detect(raw_bytes)
                         html_content = raw_bytes.decode(detection['encoding'] or 'utf-8', errors='replace')
 
-                    break
+                    break  # Stop after finding the first HTML part
 
+            # If no HTML part was found in the MHTML
             if not html_content:
                 QMessageBox.critical(self, "Ошибка", "HTML содержимое не найдено в .mhtml файле.")
-                raise ValueError("HTML содержимое не найдено в .mhtml файле.")
+                raise ValueError("HTML content not found in .mhtml file.")
 
         except Exception as e:
+            # Show error dialog if anything goes wrong during reading or parsing
             QMessageBox.critical(self, "Ошибка чтения MHTML", str(e))
             return
 
+        # Pass the extracted HTML to the conversion method
         self.convert_to_markdown(html_content)
+
+        # Clear the save status label
         self.save_label.setText("")
 
     def convert_to_markdown(self, html_content: str):
+        """
+        Converts raw HTML content into cleaned and formatted Markdown text.
 
+        Applies multiple regex-based fixes and formatting improvements to enhance Markdown compatibility,
+        including code block detection, request formatting, table restoration, and tag-based replacements.
+
+        Args:
+            html_content (str): The HTML content to be converted.
+        """
+        # Convert HTML to initial Markdown using html2text
         markdown_text = html2text.html2text(html_content)
-        # print(markdown_text)
 
-        ########### fix start
+        ########### Start of fix block ###########
+
+        # Define a marker pattern used in specific UI controls (e.g., "Copy", "Edit")
         mark = r"(?:КопироватьРедактировать|Всегда\s+показывать\s+подробности.+?Копировать)"
 
+        # Fix spacing issues around blocks with UI elements
         pattern = r'(^\s+$)\s+$(\s+' + mark + ')'
         v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}text\n{m.group(2)}", markdown_text)
 
+        # Merge headings with UI controls following them
         pattern = r'(^\s+\w+$\s+$\s+' + mark + ')'
         v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"\n{m.group(1)}", markdown_text)
 
+        # Convert marked blocks into fenced code blocks
         pattern = r'^\s+(\w+)$\s+$\s+' + mark + '(.+?^$)'
         v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}{m.group(2)}```\n", markdown_text)
 
+        # Add placeholder lines before code blocks following markdown lists
         pattern = r'(^\s*\*+[^*]+?)\n(\s*```)'
         v_pattern = re.compile(pattern, re.MULTILINE | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}\n'\n{m.group(2)}", markdown_text)
 
+        # Apply custom text replacements from config
         markdown_text = self.fix_text_replace(markdown_text)
 
+        # Format ChatGPT requests into collapsible blocks
         markdown_text = self.request_format(markdown_text)
+
+        # Restore tables broken by markdown conversion
         markdown_text = self.table_restore(markdown_text)
 
+        # Additional regex cleanup (headers, tables, etc.)
         markdown_text = self.fix_text_regexp(markdown_text)
 
+        # Fix indentation inside code blocks
         markdown_text = self.fix_code_blocks(markdown_text)
 
+        # Add extra hash to headings for better folding behavior in Obsidian
         markdown_text = re.sub(r'(#{2,}) ', r'\1# ', markdown_text, flags=re.MULTILINE)
-        ############ fix finish
 
+        ########### End of fix block ###########
+
+        # Store result and update UI
         self.md_text = markdown_text
         QMessageBox.information(self, "Готово", f"Преобразование завершено:\n{self.file_path}")
         self.mhtml_path_label.setText(self.file_path)
@@ -540,35 +717,58 @@ class GPTToMarkdownApp(QWidget):
         self.activate_all_widgets(self, True)
 
     def request_format(self, text: str) -> str:
-        text = re.sub(r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
-                      fr"""{REQUEST_NUMBER_HEADER}\n> [!{self.request_md_tag}] Запрос:
+        """
+        Formats question-and-answer blocks from raw Markdown into a structured request block.
+
+        Specifically targets phrases like "Вы сказали" / "ChatGPT сказал" and replaces them
+        with a formatted quote block and request header.
+
+        Args:
+            text (str): The Markdown text to format.
+
+        Returns:
+            str: The formatted text.
+        """
+        text = re.sub(
+            r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
+            fr"""{REQUEST_NUMBER_HEADER}\n> [!{self.request_md_tag}] Запрос:
     > \1
 # <span style="color:green"> + </span>
-""", text, flags=re.DOTALL)
-
+""",
+            text,
+            flags=re.DOTALL
+        )
         return text
 
     @staticmethod
     def table_restore(text):
+        """
+        Fixes Markdown tables that have been broken into separate lines by line breaks.
+
+        Joins wrapped table lines back together to ensure they render as a valid table.
+
+        Args:
+            text (str): The Markdown text containing broken tables.
+
+        Returns:
+            str: The restored table text.
+        """
         pattern = re.compile(
             r"^((---\|)+---\s*$)(.+?)(^\s{2}$)",
             re.MULTILINE | re.DOTALL
         )
 
         def process_table_block(match):
-            start = match.group(1)  # line with ---|---|---
-            body = match.group(3)  # table body
-            end = match.group(4)  # table end
+            start = match.group(1)  # Table separator line (e.g., ---|---|)
+            body = match.group(3)  # Actual table body (potentially broken)
+            end = match.group(4)  # End of table block marker
 
-            # Split the body into strings
             lines = body.splitlines()
-
             processed_lines = []
             buffer_line = ""
 
             for line in lines:
-
-                # If the line does not end with ‘ ’ - it is a line break
+                # Merge lines without proper Markdown table line endings
                 if not line.endswith("  "):
                     buffer_line += line + " "
                 else:
@@ -577,12 +777,23 @@ class GPTToMarkdownApp(QWidget):
                         processed_lines.append(buffer_line)
                     buffer_line = ""
 
-            # Glue back together via \n with start and end saved
             return start + "\n" + "\n".join(processed_lines) + "\n" + end
 
         return pattern.sub(process_table_block, text)
 
     def fix_text_replace(self, text):
+        """
+        Applies hard-coded string replacements defined in the configuration.
+
+        Replacements are defined in the format 'original:replacement' per line
+        under the config section 'Hard_replacements'.
+
+        Args:
+            text (str): Input Markdown text.
+
+        Returns:
+            str: Text after replacements.
+        """
         raw_value = self.config.get("Hard_replacements", "replacements", fallback="")
         replacements = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
         for replacement in replacements:
@@ -591,18 +802,47 @@ class GPTToMarkdownApp(QWidget):
         return text
 
     def fix_text_regexp(self, text):
-        text = REQUEST_NUMBER_HEADER + re.sub(fr'^.*?(?=>\s*\[!{self.request_md_tag}]\s*Запрос:)', '\n', text, flags=re.DOTALL)
+        """
+        Applies regex-based fixes to the Markdown text.
+
+        This includes trimming leading content before request blocks and
+        replacing table pipe starts with dashes for alignment.
+
+        Args:
+            text (str): Input Markdown text.
+
+        Returns:
+            str: Cleaned and modified text.
+        """
+        # Remove content before the first request block
+        text = REQUEST_NUMBER_HEADER + re.sub(
+            fr'^.*?(?=>\s*\[!{self.request_md_tag}]\s*Запрос:)',
+            '\n', text, flags=re.DOTALL
+        )
+        # Fix broken table start rows
         text = re.sub(r'^\|', '-|', text, flags=re.MULTILINE)
         return text
 
     @staticmethod
     def fix_code_blocks(text):
+        """
+        Normalizes indentation inside fenced code blocks to avoid rendering issues.
+
+        Args:
+            text (str): Markdown text containing code blocks.
+
+        Returns:
+            str: Text with fixed code block indentation.
+        """
+
         def replacer(match):
-            # Cut out the content of the block and process this content
             code = match.group(2)
-            # print(code)
             count = 4
-            code = '\n'.join(line[count:] if line.startswith(' ' * count) else line for line in code.splitlines())
+            # Remove up to 4 spaces of indentation
+            code = '\n'.join(
+                line[count:] if line.startswith(' ' * count) else line
+                for line in code.splitlines()
+            )
             if code.startswith('\n'):
                 code = code[1:]
             return f'```{match.group(1)}{code}\n```'
@@ -611,9 +851,25 @@ class GPTToMarkdownApp(QWidget):
         return re.sub(pattern, replacer, text, flags=re.DOTALL)
 
     @staticmethod
-    def convert_tags(tags : list[str]) -> list[tuple[str, str]]:
-        return [(re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
-                     re.sub(r'.·', '·', w.strip())) for w in tags]
+    def convert_tags(tags: list[str]) -> list[tuple[str, str]]:
+        """
+        Converts raw tag strings into (search_string, display_tag) tuples.
+
+        Replaces underscores with spaces and handles encoded slashes and separators.
+
+        Args:
+            tags (list[str]): A list of tag strings.
+
+        Returns:
+            list[tuple[str, str]]: List of (normalized_name, formatted_tag).
+        """
+        return [
+            (
+                re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
+                re.sub(r'.·', '·', w.strip())
+            )
+            for w in tags
+        ]
 
 
 if __name__ == "__main__":
