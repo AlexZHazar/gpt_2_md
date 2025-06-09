@@ -327,7 +327,8 @@ class GPTToMarkdownApp(QWidget):
         self.page_name_template.setText(page_template)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
         base_path = self.export_path
-        if self.split_pages_cb.isChecked():
+        # if self.split_pages_cb.isChecked():
+        if True:
             base_path = os.path.join(base_path, f"exported_{self.now}")
             os.makedirs(base_path, exist_ok=True)
             md_text = re.sub(REQUEST_NUMBER_HEADER, 'x'*50+REQUEST_NUMBER_HEADER, self.md_text)
@@ -364,36 +365,46 @@ class GPTToMarkdownApp(QWidget):
             QMessageBox.information(self, "Готово", f"Сохранено в: {full_file_path}")
             self.save_label.setText(f"Сохранено в: {full_file_path}")
 
+
+
     def merge_blocks(self, blocks):
+
+        pattern = r'(# <span style="color:gray">)\s*(\d+)\s*(</span>)'
+        page_name = self.page_name_template.text()
+
+        try:
+            spn = int(self.start_page_number_input.text().strip())
+        except ValueError:
+            spn = 1
+
+        def make_replacer(page_name, fixed_number=None):
+            def replacer(match):
+                if fixed_number is not None:
+                    page_number = fixed_number
+                else:
+                    page_number = int(match.group(2))
+                return f'[[{page_name} {f"{page_number:03}"}{match.group(1)}{match.group(2)}{match.group(3)}|{match.group(2)}]]'
+
+            return replacer
+
 
         self.page_groups, _page_err = self.parse_page_groups(self.range_input.text())
 
         if not self.split_pages_cb.isChecked():
             page_groups = [list(range(1, len(blocks) + 1))]
+            # spn = 0
+        elif not self.range_input.text().strip():
+            page_groups = [[i] for i in range(1, len(blocks) + 1)]
         else:
             page_groups = self.page_groups
-            if not self.range_input.text().strip():
 
-                pattern = r'(# <span style="color:gray">)\s*(\d+)\s*(</span>)'
 
-                def replacer(match):
-                    number = int(match.group(2))
-                    number_str = f"{number:03}"
-                    page_name = self.page_name_template.text()
-                    return f'[[{page_name} {number_str}{match.group(1)}{match.group(2)}{match.group(3)}|{match.group(2)}]]'
-
-                for h in blocks:
-                    # [[page 001# <span style="color:gray">1</span>|1]]
-                    # # <span style="color:gray">1</span>
-                    h[1][0] = re.sub(pattern, replacer, h[1][0])
-
-                return blocks, None
-
-        # print(page_groups)
+        print(page_groups)
         merged = []
 
         for idg, group in enumerate(page_groups):
             merged_group = ([],[],[])
+            replacer = make_replacer(page_name, idg+spn)
             for i in group:
                 if 1 <= i <= len(blocks):
 
@@ -401,8 +412,11 @@ class GPTToMarkdownApp(QWidget):
                     # (['text1'],['header1'],[number1])
 
                     merged_group[0].append(blocks[i - 1][0][0].strip())
-                    merged_group[1].append(blocks[i - 1][1][0].strip())  # TODO: rework header to link here!
                     merged_group[2].append(blocks[i - 1][2][0])
+
+                    block = re.sub(pattern, replacer, blocks[i - 1][1][0].strip())
+                    merged_group[1].append(block)
+                    # merged_group[1].append(blocks[i - 1][1][0].strip())  # TODO: rework header to link here!
 
                     # TODO: check for whole context
 
@@ -435,7 +449,7 @@ class GPTToMarkdownApp(QWidget):
 
         headers = ""
         request_ids = []
-        with open(os.path.join(base_path, 'request_list.md'), "w", encoding="utf-8") as headers_file:
+        with open(os.path.join(base_path, 'request list.md'), "w", encoding="utf-8") as headers_file:
             headers_file.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
             headers_file.writelines(self.file_path + '\n\n---')
 
@@ -459,7 +473,7 @@ class GPTToMarkdownApp(QWidget):
 
                 filename = f"{page_page_template} {idx+spn:03}.md"
                 prev_link = f"[[{folder_path}{page_page_template} {idx-1+spn:03}|{page_page_template} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
-                header_link = f"[[{folder_path}request_list|request_list]]"+" "*10
+                header_link = f"[[{folder_path}request list|request list]]"+" "*10
                 next_link = f">  [[{folder_path}{page_page_template} {idx+1+spn:03}|{page_page_template} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
                 range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
                 nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
@@ -511,7 +525,7 @@ class GPTToMarkdownApp(QWidget):
             # print('='*100)
             filename = f"{page_page_template} {idx+spn:03}.md"
             prev_link = f"[[{folder_path}{page_page_template} {idx-1+spn:03}|{page_page_template} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
-            header_link = f"[[{folder_path}request_list|request_list]]"+" "*10
+            header_link = f"[[{folder_path}request list|request list]]"+" "*10
             next_link = f">  [[{folder_path}{page_page_template} {idx+1+spn:03}|{page_page_template} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
             range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
             nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
@@ -535,7 +549,7 @@ class GPTToMarkdownApp(QWidget):
         print(page_groups)
         if not page_groups:
             page_groups = [[0]]
-        request_list_file_path = os.path.join(base_path, "request_list.md")
+        request_list_file_path = os.path.join(base_path, "request list.md")
         file_name = os.path.splitext(os.path.basename(self.file_path))[0]
         self.save_request_list(request_list, request_list_file_path, file_name, page_groups)
 
