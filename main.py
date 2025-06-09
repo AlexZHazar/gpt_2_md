@@ -283,87 +283,71 @@ class GPTToMarkdownApp(QWidget):
             return groups_set, groups
         else:
             return groups_list, groups
-
-    def save_request_list(self, request_list: list[list[str]], request_list_file_path: str, file_name, request_matrix: list[list[int]] = None):
-        # folder_path = f'exported_{self.now}/'
-        folder_path = ''
-        try:
-            spn = int(self.start_page_number_input.text().strip())
-        except ValueError:
-            spn = 1
-            self.start_page_number_input.setText("1")
-        page_template = self.page_name_template.text().strip()
-        page_template = 'page' if page_template == '' else page_template
-        with open(request_list_file_path, "w", encoding="utf-8") as f:
-            f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
-            f.writelines(self.file_path + '\n\n---\n\n')
-            # print(request_matrix)
-            for id_l, l in enumerate(request_list):
-                if request_matrix and request_matrix != [[0]]:
-                    f.writelines('\n# ' + str(tuple(request_matrix[id_l])).replace(',)', ')') + f'   {page_template} {id_l+spn:03}\n')
-                for id_s, s in enumerate(l):
-                    if not request_matrix:
-                        pass
-                    elif request_matrix == [[0]]:
-                        s = re.sub(r'exported_file_\d+',f'{folder_path}{page_template} {id_l+spn:03}', s)
-                    else:
-                        s = re.sub(r'exported_file_\d+',f'{folder_path}{page_template} {id_l+spn:03}', s)
-                        # print('-'*100+'\n'+s)
-                    f.writelines(s + '\n')
-
-                        # TODO: save request_list.md
+    #
+    # def save_request_list(self, request_list: list[list[str]], request_list_file_path: str, file_name, request_matrix: list[list[int]] = None):
+    #     # folder_path = f'exported_{self.now}/'
+    #     folder_path = ''
+    #     try:
+    #         spn = int(self.start_page_number_input.text().strip())
+    #     except ValueError:
+    #         spn = 1
+    #         self.start_page_number_input.setText("1")
+    #     page_template = self.page_name_template.text().strip()
+    #     page_template = 'page' if page_template == '' else page_template
+    #     with open(request_list_file_path, "w", encoding="utf-8") as f:
+    #         f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
+    #         f.writelines(self.file_path + '\n\n---\n\n')
+    #         # print(request_matrix)
+    #         for id_l, l in enumerate(request_list):
+    #             if request_matrix and request_matrix != [[0]]:
+    #                 f.writelines('\n# ' + str(tuple(request_matrix[id_l])).replace(',)', ')') + f'   {page_template} {id_l+spn:03}\n')
+    #             for id_s, s in enumerate(l):
+    #                 if not request_matrix:
+    #                     pass
+    #                 elif request_matrix == [[0]]:
+    #                     s = re.sub(r'exported_file_\d+',f'{folder_path}{page_template} {id_l+spn:03}', s)
+    #                 else:
+    #                     s = re.sub(r'exported_file_\d+',f'{folder_path}{page_template} {id_l+spn:03}', s)
+    #                     # print('-'*100+'\n'+s)
+    #                 f.writelines(s + '\n')
+    #
+    #                     # TODO: save request_list.md
 
 
     def save(self):
-        # folder_path = f'exported_{self.now}/'
-        folder_path = ''
+        # # folder_path = f'exported_{self.now}/'
+        # folder_path = ''
         if self.apply_start_request_number_cb.isChecked():
             rqn = int(self.start_page_number_input.text().strip())
         else:
             rqn = 1
-        file_name = os.path.splitext(os.path.basename(self.file_path))[0]
+        # file_name = os.path.splitext(os.path.basename(self.file_path))[0]
         page_template = self.page_name_template.text().strip()
         page_template = 'page' if page_template == '' else page_template
         self.page_name_template.setText(page_template)
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
-        base_path = self.export_path
-        # if self.split_pages_cb.isChecked():
-        if True:
-            base_path = os.path.join(base_path, f"exported_{self.now}")
-            os.makedirs(base_path, exist_ok=True)
-            md_text = re.sub(REQUEST_NUMBER_HEADER, 'x'*50+REQUEST_NUMBER_HEADER, self.md_text)
-            blocks = re.split('x'*50, md_text)[1:]
-            for idx, block in enumerate(blocks):
-                new_header = REQUEST_NUMBER_HEADER.replace('_', str(idx + rqn))
-                # blocks[idx] = block.replace(REQUEST_NUMBER_HEADER, new_header)
-                text = block.replace(REQUEST_NUMBER_HEADER, new_header)
+        base_path = os.path.join(self.export_path, f"exported_{self.now}")
+        os.makedirs(base_path, exist_ok=True)
+        md_text = re.sub(REQUEST_NUMBER_HEADER, 'x'*50+REQUEST_NUMBER_HEADER, self.md_text)
+        blocks = re.split('x'*50, md_text)[1:]
+        for idx, block in enumerate(blocks):
+            new_header = REQUEST_NUMBER_HEADER.replace('_', str(idx + rqn))
+            text = block.replace(REQUEST_NUMBER_HEADER, new_header)
 
-                pattern = fr"({new_header}.*?)(?=\n#)"
-                match = re.search(pattern, text, flags=re.DOTALL | re.MULTILINE)
+            pattern = fr"({new_header}.*?)(?=\n#)"
+            match = re.search(pattern, text, flags=re.DOTALL | re.MULTILINE)
 
-                request_item =  match.group(1).strip()
-                # print('-'*100, '\n', request_item)
-                blocks[idx] = ([text], [request_item], [idx + rqn])  # request_item+'\n\n---'
+            request_item =  match.group(1).strip()
+            # print('-'*100, '\n', request_item)
+            blocks[idx] = ([text], [request_item], [idx + rqn])  # request_item+'\n\n---'
 
-            merged, page_groups = self.merge_blocks(blocks)
+        merged, page_groups = self.merge_blocks(blocks)
 
-            # for i in range(len(merged)):
-            #     print('-'*50+'\n', merged[i])
+        # for i in range(len(merged)):
+        #     print('-'*50+'\n', merged[i])
 
-            self.save_blocks2(merged, base_path, page_groups)
-        else:
-            full_file_path = os.path.join(base_path, f"exported_file_{self.now}.md")
-            text, request_list = self.set_number_header(self.md_text)
-            with open(full_file_path, "w", encoding="utf-8") as f:
-                f.writelines(f'\n### <span style="color:green">Source file:  </span>{file_name}\n')
-                f.writelines(self.file_path + '\n\n---\n\n')
-                f.write(text)
-            request_list_file_path = os.path.join(base_path, f"exported_file_{self.now}_request_list.md")
-            self.save_request_list([request_list], request_list_file_path, file_name)
+        self.save_blocks2(merged, base_path, page_groups)
 
-            full_file_path = full_file_path.replace('\\', '/')
-            QMessageBox.information(self, "Готово", f"Сохранено в: {full_file_path}")
-            self.save_label.setText(f"Сохранено в: {full_file_path}")
 
 
 
@@ -499,66 +483,66 @@ class GPTToMarkdownApp(QWidget):
 
 
 
-
-    def save_blocks(self, merged_blocks, base_path, page_groups):
-        # folder_path = f'exported_{self.now}/'
-        folder_path = ''
-        try:
-            spn = int(self.start_page_number_input.text().strip())
-        except ValueError:
-            spn = 1
-            self.start_page_number_input.setText("1")
-        page_page_template = self.page_name_template.text().strip()
-        page_page_template = 'page' if page_page_template == '' else page_page_template
-        tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
-
-        raw_value = self.config.get("Keywords", "words", fallback="")
-        keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
-        keywords = self.convert_tags(keywords)
-        # pprint(keywords)
-        # print(keywords)
-        # request_list = []
-        for idx, group in enumerate(merged_blocks):
-            content = "\n\n".join(group)
-            request_id_list_str =', '.join(str(x) for x in self.page_groups[idx]) if self.range_input.text().replace('%', '').strip() else ""
-            # print(content)
-            # print('='*100)
-            filename = f"{page_page_template} {idx+spn:03}.md"
-            prev_link = f"[[{folder_path}{page_page_template} {idx-1+spn:03}|{page_page_template} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
-            header_link = f"[[{folder_path}request list|request list]]"+" "*10
-            next_link = f">  [[{folder_path}{page_page_template} {idx+1+spn:03}|{page_page_template} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
-            range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
-            nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
-            tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
-            tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
-
-            full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
-
-            try:
-                request_id_list_int = [int(x) for x in request_id_list_str.split(',')]
-            except ValueError:
-                request_id_list_int = [idx+spn]
-
-            # full_text, request_list_item = self.set_number_header(full_text, request_id_list_int)
-            # request_list.append(request_list_item)
-
-            # print(page_groups)
-            # pprint(request_id_list_int)
-            with open(os.path.join(base_path, filename), "w", encoding="utf-8") as f:
-                f.write(full_text)
-        print(page_groups)
-        if not page_groups:
-            page_groups = [[0]]
-        request_list_file_path = os.path.join(base_path, "request list.md")
-        file_name = os.path.splitext(os.path.basename(self.file_path))[0]
-        self.save_request_list(request_list, request_list_file_path, file_name, page_groups)
-
-        base_path = base_path.replace('\\', '/')
-        QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
-        QMessageBox.warning(self, "Важно", "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
-                            "\n\nЛучше закрыть/открыть Obsidian проект заново")
-        self.save_label.setText(f"Сохранено в: {base_path}")
-
+    #
+    # def save_blocks(self, merged_blocks, base_path, page_groups):
+    #     # folder_path = f'exported_{self.now}/'
+    #     folder_path = ''
+    #     try:
+    #         spn = int(self.start_page_number_input.text().strip())
+    #     except ValueError:
+    #         spn = 1
+    #         self.start_page_number_input.setText("1")
+    #     page_page_template = self.page_name_template.text().strip()
+    #     page_page_template = 'page' if page_page_template == '' else page_page_template
+    #     tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
+    #
+    #     raw_value = self.config.get("Keywords", "words", fallback="")
+    #     keywords = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
+    #     keywords = self.convert_tags(keywords)
+    #     # pprint(keywords)
+    #     # print(keywords)
+    #     # request_list = []
+    #     for idx, group in enumerate(merged_blocks):
+    #         content = "\n\n".join(group)
+    #         request_id_list_str =', '.join(str(x) for x in self.page_groups[idx]) if self.range_input.text().replace('%', '').strip() else ""
+    #         # print(content)
+    #         # print('='*100)
+    #         filename = f"{page_page_template} {idx+spn:03}.md"
+    #         prev_link = f"[[{folder_path}{page_page_template} {idx-1+spn:03}|{page_page_template} {idx-1+spn:03}]]  <"+" "*10 if idx > 0 else ""
+    #         header_link = f"[[{folder_path}request list|request list]]"+" "*10
+    #         next_link = f">  [[{folder_path}{page_page_template} {idx+1+spn:03}|{page_page_template} {idx+1+spn:03}]]" if idx < len(merged_blocks) - 1 else ""
+    #         range_info = f"\n%%  Запросы:  {request_id_list_str}  %%\n" if self.range_input.text().replace('%', '').strip() else ""
+    #         nav = f"\n---{range_info}\n{prev_link}{header_link}{next_link}\n\n---\n"
+    #         tags = [f"#{word[1]}" for word in keywords if word[0].lower() in content.lower()]
+    #         tag_block = "\n".join(" ".join(tags[i:i + tag_string_len]) for i in range(0, len(tags), tag_string_len))
+    #
+    #         full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
+    #
+    #         try:
+    #             request_id_list_int = [int(x) for x in request_id_list_str.split(',')]
+    #         except ValueError:
+    #             request_id_list_int = [idx+spn]
+    #
+    #         # full_text, request_list_item = self.set_number_header(full_text, request_id_list_int)
+    #         # request_list.append(request_list_item)
+    #
+    #         # print(page_groups)
+    #         # pprint(request_id_list_int)
+    #         with open(os.path.join(base_path, filename), "w", encoding="utf-8") as f:
+    #             f.write(full_text)
+    #     print(page_groups)
+    #     if not page_groups:
+    #         page_groups = [[0]]
+    #     request_list_file_path = os.path.join(base_path, "request list.md")
+    #     file_name = os.path.splitext(os.path.basename(self.file_path))[0]
+    #     self.save_request_list(request_list, request_list_file_path, file_name, page_groups)
+    #
+    #     base_path = base_path.replace('\\', '/')
+    #     QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
+    #     QMessageBox.warning(self, "Важно", "Часть файлов может не отображаться из проблем с обновлением структуры в Obsidian"
+    #                         "\n\nЛучше закрыть/открыть Obsidian проект заново")
+    #     self.save_label.setText(f"Сохранено в: {base_path}")
+    #
 
 
 
