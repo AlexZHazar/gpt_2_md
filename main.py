@@ -14,14 +14,11 @@ import sys
 from datetime import datetime
 from configparser import ConfigParser
 import quopri
-from typing import Any
 
 import chardet
 import html2text
 from email import policy
 from email.parser import BytesParser
-
-from pprint import pprint
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
@@ -38,7 +35,6 @@ iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
 """
 
 REQUEST_NUMBER_HEADER = r'# <span style="color:gray">_</span>'
-HEADER_LINE_NUMBER = 3
 
 
 def load_icon_from_base64():
@@ -226,6 +222,17 @@ class GPTToMarkdownApp(QWidget):
             self.config.set("Settings", "default_save_path", folder)
             save_config(self.config)
 
+    def get_start_page_number(self):
+        if not self.split_pages_cb.isChecked():
+            spn = 0
+        else:
+            try:
+                spn = int(self.start_page_number_input.text().strip())
+            except ValueError:
+                spn = 1
+                self.start_page_number_input.setText("1")
+        return spn
+
     def parse_page_groups(self, text: str):
         unigue_sorted = self.unique_sort_cb.isChecked()
         text = text.replace(' ', '')
@@ -313,17 +320,14 @@ class GPTToMarkdownApp(QWidget):
         # for i in range(len(merged)):
         #     print('-'*50+'\n', merged[i])
 
-        self.save_blocks2(merged, base_path, page_groups)
+        self.save_blocks(merged, base_path, page_groups)
 
     def merge_blocks(self, blocks):
 
         pattern = r'(# <span style="color:gray">)\s*(\d+)\s*(</span>)'
         page_name = self.page_name_template.text()
 
-        try:
-            spn = int(self.start_page_number_input.text().strip())
-        except ValueError:
-            spn = 1
+        spn = self.get_start_page_number()
 
         def make_replacer(page_name, fixed_number=None):
             def replacer(match):
@@ -339,7 +343,6 @@ class GPTToMarkdownApp(QWidget):
 
         if not self.split_pages_cb.isChecked():
             page_groups = [list(range(1, len(blocks) + 1))]
-            # spn = 0
         elif not self.range_input.text().strip():
             page_groups = [[i] for i in range(1, len(blocks) + 1)]
         else:
@@ -371,15 +374,11 @@ class GPTToMarkdownApp(QWidget):
 
         return merged, self.page_groups
 
-    def save_blocks2(self, merged_blocks, base_path, page_groups):
+    def save_blocks(self, merged_blocks, base_path, page_groups):
         # folder_path = f'exported_{self.now}/'
         folder_path = ''
         file_name = os.path.splitext(os.path.basename(self.file_path))[0]
-        try:
-            spn = int(self.start_page_number_input.text().strip())
-        except ValueError:
-            spn = 1
-            self.start_page_number_input.setText("1")
+        spn = self.get_start_page_number()
         page_page_template = self.page_name_template.text().strip()
         page_page_template = 'page' if page_page_template == '' else page_page_template
         tag_string_len = int(self.config.get("Settings", "tag_string_len", fallback=""))
@@ -494,10 +493,10 @@ class GPTToMarkdownApp(QWidget):
             QMessageBox.critical(self, "Ошибка чтения MHTML", str(e))
             return
 
-        self.save_as_markdown(html_content)
+        self.convert_to_markdown(html_content)
         self.save_label.setText("")
 
-    def save_as_markdown(self, html_content: str):
+    def convert_to_markdown(self, html_content: str):
 
         markdown_text = html2text.html2text(html_content)
         # print(markdown_text)
@@ -523,7 +522,7 @@ class GPTToMarkdownApp(QWidget):
 
         markdown_text = self.fix_text_replace(markdown_text)
 
-        markdown_text = self.my_massage_format(markdown_text)
+        markdown_text = self.request_format(markdown_text)
         markdown_text = self.table_restore(markdown_text)
 
         markdown_text = self.fix_text_regexp(markdown_text)
@@ -539,7 +538,7 @@ class GPTToMarkdownApp(QWidget):
         self.split_pages_cb.setChecked(False)
         self.activate_all_widgets(self, True)
 
-    def my_massage_format(self, text: str) -> str:
+    def request_format(self, text: str) -> str:
         text = re.sub(r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
                       fr"""{REQUEST_NUMBER_HEADER}\n> [!{self.request_md_tag}] Запрос:
     > \1
@@ -614,36 +613,6 @@ class GPTToMarkdownApp(QWidget):
     def convert_tags(tags : list[str]) -> list[tuple[str, str]]:
         return [(re.sub('_', ' ', re.sub('.·', '/', re.sub(r'^.+/', '', w.strip()))),
                      re.sub(r'.·', '·', w.strip())) for w in tags]
-
-    def set_number_header(self, text, request_number_list: list[int] = None):
-        if not request_number_list:
-            pattern = REQUEST_NUMBER_HEADER
-        else:
-            pattern = REQUEST_NUMBER_HEADER.replace('_,','[^<]+')
-        extracted_lines = []
-        def replacer(match):
-            # get the end position of the match
-            end = match.end()
-            if not request_number_list:
-                new_id = replacer.counter+1
-            else:
-                new_id = request_number_list[replacer.counter]
-            new_value = f'# <span style="color:gray">   {new_id}   </span>'
-
-            # get string after the match
-            after = text[end:text.find('#', end)]  # till the end of line or next header
-
-            extracted_lines.append(f'\n---\n[[exported_file_{self.now}{new_value}|{new_id}]]\n{after.strip()}')
-
-            replacer.counter += 1
-            # print(match.group(0), new_value)
-
-            # returning the match
-            return new_value
-        replacer.counter = 0
-        result = re.sub(pattern, replacer, text)
-
-        return result, extracted_lines
 
 
 if __name__ == "__main__":
