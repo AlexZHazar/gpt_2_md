@@ -151,3 +151,14 @@ words =
 
 
 ✅ **Этот README.md на 80% сгенерирован именно таким способом**
+
+* * *
+
+💬 Release такой толстый, потому что это однофайловый exe-шник из Python - он внутри в себе всю кухню содержит.
+
+ ###### сгенерирован так:
+```
+pip install PyInstaller
+pip install --upgrade PyInstaller pyinstaller-hooks-contrib
+pyinstaller --windowed --onefile --name "ChatGPT to Obsidian" main.py --icon=ChatGPT_Obsidian.ico
+```
