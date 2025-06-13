@@ -1,5 +1,3 @@
-# pip install PySide6 html2text chardet
-
 """
 pip install PyInstaller
 pip install --upgrade PyInstaller pyinstaller-hooks-contrib
@@ -19,6 +17,7 @@ import chardet
 import html2text
 from email import policy
 from email.parser import BytesParser
+from bs4 import BeautifulSoup
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
@@ -26,6 +25,8 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton,
     QFileDialog, QMessageBox, QLabel, QCheckBox, QGroupBox, QHBoxLayout
 )
+
+from markdownify import markdownify
 
 
 CONFIG_PATH = "config.ini"
@@ -36,6 +37,7 @@ iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8
 
 REQUEST_LIST_NAME = '_request list_'
 REQUEST_NUMBER_HEADER = r'# <span style="color:gray">_</span>'
+REQUEST_FOOTER = '# <span style="color:green"> + </span>'
 
 
 def load_icon_from_base64():
@@ -64,6 +66,10 @@ class GPTToMarkdownApp(QWidget):
         self.file_path = ""
         self.now = None
         self.page_groups = []
+        self.base_path = ""
+        self.ui_type = ""
+
+        self.test_list = {}
 
         self.config = load_config()
 
@@ -72,7 +78,7 @@ class GPTToMarkdownApp(QWidget):
         self.setWindowIcon(load_icon_from_base64())
 
         # widgets setup
-        self.mhtml_load_file_btn = QPushButton("Открыть MHTML файл")
+        self.mhtml_load_file_btn = QPushButton("Открыть и преобразовать MHTML файл")
         self.mhtml_path_label = QLabel("")
 
         self.split_pages_cb = QCheckBox("Разбить по страницам")
@@ -158,6 +164,7 @@ class GPTToMarkdownApp(QWidget):
         self.export_path = self.config.get("Settings", "default_save_path", fallback=".")
         self.load_path = self.config.get("Settings", "default_load_path", fallback=".")
         self.request_md_tag = self.config.get("Settings", "request_md_tag", fallback=".")
+        self.test_mode = self.config.get("Settings", "test_mode", fallback="")
 
         # set initial values
         self.md_path_label.setText("Путь к проекту Obsidian: " + self.export_path)
@@ -336,8 +343,8 @@ class GPTToMarkdownApp(QWidget):
 
         # Get current timestamp and create base export directory
         self.now = datetime.now().strftime("%Y%m%d%H%M%S")
-        base_path = os.path.join(self.export_path, f"exported_{self.now}")
-        os.makedirs(base_path, exist_ok=True)
+        self.base_path = os.path.join(self.export_path, f"exported_{self.now}")
+        os.makedirs(self.base_path, exist_ok=True)
 
         # Mark request headers with a unique delimiter to allow block splitting
         md_text = re.sub(REQUEST_NUMBER_HEADER, 'x' * 50 + REQUEST_NUMBER_HEADER, self.md_text)
@@ -363,7 +370,7 @@ class GPTToMarkdownApp(QWidget):
         merged, page_groups = self.merge_blocks(blocks)
 
         # Save all the resulting pages
-        self.save_blocks(merged, base_path, page_groups)
+        self.save_blocks(merged, page_groups)
 
     def merge_blocks(self, blocks):
         """
@@ -455,7 +462,7 @@ class GPTToMarkdownApp(QWidget):
         # Return the merged result and the associated page groups
         return merged, self.page_groups
 
-    def save_blocks(self, merged_blocks, base_path, page_groups):
+    def save_blocks(self, merged_blocks, page_groups):
         """
         Saves each group of merged Markdown blocks to separate files and writes
         an index file listing request headers.
@@ -465,11 +472,16 @@ class GPTToMarkdownApp(QWidget):
         Args:
             merged_blocks (List[Tuple[List[str], List[str], List[int]]]):
                 List of content groups to be saved.
-            base_path (str):
-                The directory path where the files will be saved.
             page_groups (List[List[int]]):
                 The request ID groups assigned to each output page.
         """
+
+        # for test only!
+        if bool(self.test_mode):
+            print(f'test_mode: {self.test_mode}')
+            for k, v in self.test_list.items():
+                self.save_text_file(v[1], os.path.join(self.base_path, f'__{k}.{v[0]}'))
+
         # Optional subfolder inside base_path (unused here)
         # folder_path = f'exported_{self.now}/'
         folder_path = ''
@@ -495,7 +507,7 @@ class GPTToMarkdownApp(QWidget):
         request_ids = []
 
         # Open main request list file
-        with open(os.path.join(base_path, f'{REQUEST_LIST_NAME}.md'), "w", encoding="utf-8") as headers_file:
+        with open(os.path.join(self.base_path, f'{REQUEST_LIST_NAME}.md'), "w", encoding="utf-8") as headers_file:
 
             # Write range_input comment if present
             if self.range_input.text().strip():
@@ -548,17 +560,16 @@ class GPTToMarkdownApp(QWidget):
                 full_text = f"\n{nav}\n{tag_block}\n\n---\n{content}"
 
                 # Write the page content to its respective Markdown file
-                with open(os.path.join(base_path, filename), "w", encoding="utf-8") as context_file:
-                    context_file.write(full_text)
+                self.save_text_file(full_text, os.path.join(self.base_path, filename))
 
                 # Append headers to the main index file
                 headers_file.write("\n\n" + headers)
 
         # Normalize path for display
-        base_path = base_path.replace('\\', '/')
+        base_path_label = self.base_path.replace('\\', '/')
 
         # Notify user of successful save
-        QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path}")
+        QMessageBox.information(self, "Готово", f"{len(merged_blocks)} файлов сохранено в: {base_path_label}")
 
         # Obsidian may need to be restarted to reflect new files
         QMessageBox.warning(self, "Важно",
@@ -566,7 +577,7 @@ class GPTToMarkdownApp(QWidget):
                             "\n\nЛучше закрыть/открыть Obsidian проект заново")
 
         # Update status label in the UI
-        self.save_label.setText(f"Сохранено в: {base_path}")
+        self.save_label.setText(f"Сохранено в: {base_path_label}")
 
     def handle_mhtml(self):
         """
@@ -661,30 +672,107 @@ class GPTToMarkdownApp(QWidget):
         Args:
             html_content (str): The HTML content to be converted.
         """
-        # Convert HTML to initial Markdown using html2text
-        markdown_text = html2text.html2text(html_content)
+
+        markdown_text = ""
+
+        ########### Define the source type and converting ###########
+
+        if "DeepSeek" in html_content:
+            print("DeepSeek")
+            html_content = self.fix_deepseek_html(html_content)
+            markdown_text = markdownify(html_content)
+            self.test_list['html2text'] = ('md', html2text.html2text(html_content))
+            self.test_list['markdownify'] = ('md', markdown_text)
+            self.ui_type = 'DeepSeek'
+        elif "ChatGPT" in html_content:
+            print("ChatGPT")
+
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(html_content, 'test0.html')
+
+            html_content = self.fix_chatgpt_html(html_content)
+
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(html_content, 'test1.html')
+
+            html_content = self.canvas_fix(html_content)
+
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(html_content, 'test2.html')
+
+            markdown_text = html2text.html2text(html_content)
+            self.test_list['html2text'] = ('md', markdown_text)
+            self.test_list['markdownify'] = ('md', markdownify(html_content))
+            self.ui_type = 'ChatGPT'
+
+        if bool(self.test_mode):
+            print(f'test_mode: {self.test_mode}')
+            self.save_text_file(html_content, 'test.html')
+
+        # TODO: Add more types
+
+        self.test_list['html'] = ('html', html_content)
+
+        # def convert_with_pandoc(html: str) -> str:
+        #     result = subprocess.run(
+        #         ['C:\Program Files\Pandoc\pandoc', '-f', 'html', '-t', 'markdown'],
+        #         input=html.encode('utf-8'),
+        #         # input=html,
+        #         stdout=subprocess.PIPE
+        #     )
+        #     return result.stdout.decode('utf-8')
+        #     # return result
+        #
+        # self.test_list['pandoc'] = convert_with_pandoc(html_content)
 
         ########### Start of fix block ###########
 
         # Define a marker pattern used in specific UI controls (e.g., "Copy", "Edit")
-        mark = r"(?:КопироватьРедактировать|Всегда\s+показывать\s+подробности.+?Копировать)"
+        if self.ui_type == 'ChatGPT':
+            mark = r"(?:КопироватьРедактировать|Всегда\s+показывать\s+подробности.+?Копировать)"
 
-        # Fix spacing issues around blocks with UI elements
-        pattern = r'(^\s+$)\s+$(\s+' + mark + ')'
-        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
-        markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}text\n{m.group(2)}", markdown_text)
+            # Fix spacing issues around blocks with UI elements
+            pattern = r'(^\s+$)\s+$(\s+' + mark + ')'
+            v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+            markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}text\n{m.group(2)}", markdown_text)
 
-        # Merge headings with UI controls following them
-        pattern = r'(^\s+\w+$\s+$\s+' + mark + ')'
-        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
-        markdown_text = v_pattern.sub(lambda m: f"\n{m.group(1)}", markdown_text)
+            # Merge headings with UI controls following them
+            pattern = r'(^\s+\w+$\s+$\s+' + mark + ')'
+            v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+            markdown_text = v_pattern.sub(lambda m: f"\n{m.group(1)}", markdown_text)
 
-        # Convert marked blocks into fenced code blocks
-        pattern = r'^\s+(\w+)$\s+$\s+' + mark + '(.+?^$)'
-        v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
-        markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}{m.group(2)}```\n", markdown_text)
+            # Convert marked blocks into fenced code blocks
+            pattern = r'^\s+(\w+)$\s+$\s+' + mark + '(.+?^$)'
+            v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+            markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}{m.group(2)}```\n", markdown_text)
 
-        # Add placeholder lines before code blocks following markdown lists
+            # Restore tables broken by markdown conversion
+            markdown_text = self.table_restore(markdown_text)
+
+            # Fix indentation inside code blocks
+            markdown_text = self.fix_code_blocks(markdown_text)
+
+            # fix canvas code blocks
+            markdown_text = re.sub(r' +(```\w+)', r'\1', markdown_text, re.MULTILINE)
+
+
+            if bool(self.test_mode):
+                print(f'test_mode: {self.test_mode}')
+                self.save_text_file(markdown_text, 'test.md')
+
+        elif self.ui_type == 'DeepSeek':
+            mark = r"(?:Copy.+?Download.+?```)"
+
+            pattern = r'^\s*(\w+)$\s*$\s*' + mark
+            v_pattern = re.compile(pattern, re.MULTILINE | re.DOTALL | re.VERBOSE)
+            markdown_text = v_pattern.sub(lambda m: f"\n```{m.group(1)}\n\n", markdown_text)
+
+            markdown_text = self.remove_footer(markdown_text)
+
+        # Add placeholder lines before code blocks following Markdown lists
         pattern = r'(^\s*\*+[^*]+?)\n(\s*```)'
         v_pattern = re.compile(pattern, re.MULTILINE | re.VERBOSE)
         markdown_text = v_pattern.sub(lambda m: f"{m.group(1)}\n'\n{m.group(2)}", markdown_text)
@@ -695,14 +783,8 @@ class GPTToMarkdownApp(QWidget):
         # Format ChatGPT requests into collapsible blocks
         markdown_text = self.request_format(markdown_text)
 
-        # Restore tables broken by markdown conversion
-        markdown_text = self.table_restore(markdown_text)
-
         # Additional regex cleanup (headers, tables, etc.)
         markdown_text = self.fix_text_regexp(markdown_text)
-
-        # Fix indentation inside code blocks
-        markdown_text = self.fix_code_blocks(markdown_text)
 
         # Add extra hash to headings for better folding behavior in Obsidian
         markdown_text = re.sub(r'(#{2,}) ', r'\1# ', markdown_text, flags=re.MULTILINE)
@@ -733,7 +815,7 @@ class GPTToMarkdownApp(QWidget):
             r'##### Вы сказали:\n(.*?)\n\s*###### ChatGPT сказал:',
             fr"""{REQUEST_NUMBER_HEADER}\n> [!{self.request_md_tag}] Запрос:
     > \1
-# <span style="color:green"> + </span>
+{REQUEST_FOOTER}
 """,
             text,
             flags=re.DOTALL
@@ -779,7 +861,12 @@ class GPTToMarkdownApp(QWidget):
 
             return start + "\n" + "\n".join(processed_lines) + "\n" + end
 
-        return pattern.sub(process_table_block, text)
+        text = pattern.sub(process_table_block, text)
+
+        # Fix broken table start rows
+        text = re.sub(r'^\|', '-|', text, flags=re.MULTILINE)
+
+        return text
 
     def fix_text_replace(self, text):
         """
@@ -819,8 +906,6 @@ class GPTToMarkdownApp(QWidget):
             fr'^.*?(?=>\s*\[!{self.request_md_tag}]\s*Запрос:)',
             '\n', text, flags=re.DOTALL
         )
-        # Fix broken table start rows
-        text = re.sub(r'^\|', '-|', text, flags=re.MULTILINE)
         return text
 
     @staticmethod
@@ -870,6 +955,128 @@ class GPTToMarkdownApp(QWidget):
             )
             for w in tags
         ]
+
+    @staticmethod
+    def fix_deepseek_html(html_text):
+        """
+        Applies regex-based fixes to the Markdown text for DeepSeek.
+        Defines the request block and marks like in ChatGPT.
+
+        Args:
+            html_text (str): Input Markdown text.
+
+        Returns:
+            str: Cleaned and modified text.
+
+        """
+        # print('fix_deepseek_text')
+        def replacer(match):
+            fix_str = match.group(1)
+            fix_str = fix_str.replace('&lt;', '\&lt;')
+            return f"""##### Вы сказали:\n{fix_str}\n\n\n###### ChatGPT сказал:{match.group(2)}"""
+
+        pattern = r'([^>]+?)(</div>(?:<div class="[^"]+">){2}<div class="ds-flex [^"]+" style="align-items: flex-end; gap: 0px;")'
+
+        return re.sub(pattern, replacer, html_text, flags=re.MULTILINE)
+
+    @staticmethod
+    def fix_chatgpt_html(html_text):
+        """
+        Applies regex-based fixes to the Markdown text for ChatGPT canvas.
+
+        Args:
+            html_text (str): Input Markdown text.
+
+        Returns:
+            str: Cleaned and modified text.
+
+        """
+        # print('fix_deepseek_text')
+        def replacer(match):
+            fix_str = match.group(2)
+            fix_str = re.sub(r'</?span[^>]*>', '', fix_str)
+            return f"""{match.group(1)}{fix_str}{match.group(3)}"""
+
+        pattern = r'(<div class="cm-line">)(.+?)(</div>)(?=<div class=)'
+
+        return re.sub(pattern, replacer, html_text, flags=re.MULTILINE | re.DOTALL)
+
+    @staticmethod
+    def remove_footer(text):
+        text = re.sub(
+            r"New chat\n\nDeepThink.+?\.\.\.",
+            '', text, flags=re.DOTALL | re.MULTILINE
+        )
+        return text
+
+    def canvas_fix(self, text):
+
+        # Загрузка HTML
+        soup = BeautifulSoup(text, "html.parser")
+
+        # Поиск всех <main class="...">
+        main_tags = soup.find_all("main", class_="relative flex min-h-0 flex-auto grow flex-col")
+
+        # Замена содержимого
+        for idx,tag in enumerate(main_tags):
+
+            code_tags = tag.find_all("div",class_="cm-content")
+            for idxc, code_tag in enumerate(code_tags):
+                code_md = self.extract_canvas_code_block(str(code_tag))
+                # if bool(self.test_mode):
+                #     print(f'test_mode: {self.test_mode}')
+                #     self.save_text_file(code_md, 'code_' + str(idx) + '_' + str(idxc) + '.md')
+                code_tag.clear()
+                code_tag.append(BeautifulSoup(code_md, "html.parser"))
+
+            canvas_content = str(tag)  # Преобразуем содержимое тега в строку HTML
+
+            # Преобразуем HTML в Markdown
+            markdown_converter = html2text.HTML2Text()
+            markdown_converter.ignore_links = False
+            markdown_converter.ignore_images = True
+            markdown_converter.body_width = 0
+            markdown_converter.protect_links = True
+            markdown_content = markdown_converter.handle(canvas_content)
+
+            # Заворачиваем в <pre><code>...</code></pre>
+            markdown_replacement = f"<pre><code>{markdown_content}</code></pre>"
+
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(markdown_content, 'canvas_'+str(idx)+'.md')
+
+            # Очищаем оригинальный <main> и вставляем Markdown-вставку
+            tag.clear()
+            tag.append(BeautifulSoup(markdown_replacement, "html.parser"))
+
+        return str(soup)
+
+    @staticmethod
+    def extract_canvas_code_block(html_block: str) -> str:
+        soup = BeautifulSoup(html_block, "html.parser")
+
+        # Найти родительский блок с классом cm-content
+        content_div = soup.find("div", class_="cm-content")
+        language = content_div.get("data-language")
+        if not content_div:
+            return ""
+
+        # Извлечь строки кода из <div class="cm-line">
+        lines = []
+        for line_div in content_div.find_all("div", class_="cm-line"):
+            # line_text = ''.join(span.get_text() for span in line_div.find_all("span"))
+            line_text = re.sub(r'<[^>]*>', r'', str(line_div))
+            lines.append(line_text)
+
+        # Собрать кодовый блок с тройными кавычками и языком
+        code_block = f'<pre><code>```{language}\n\n' + '\n'.join(lines) + '\n\n```</code></pre>'
+        return code_block
+
+    @staticmethod
+    def save_text_file(text, file_path):
+        with open(file_path, 'w', encoding='utf-8') as file:
+            file.write(text)
 
 
 if __name__ == "__main__":
