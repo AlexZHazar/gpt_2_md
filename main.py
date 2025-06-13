@@ -755,13 +755,17 @@ class GPTToMarkdownApp(QWidget):
             # Fix indentation inside code blocks
             markdown_text = self.fix_code_blocks(markdown_text)
 
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(markdown_text, 'test1.md')
+
             # fix canvas code blocks
-            markdown_text = re.sub(r' +(```\w+)', r'\1', markdown_text, re.MULTILINE)
+            markdown_text = re.sub(r' +(```\w+)', r'\1', markdown_text, re.MULTILINE | re.DOTALL)
+            markdown_text = re.sub(r'(?:^\s*\d+\s*$\n?){2,}', r'   \n', markdown_text, flags=re.MULTILINE)
 
-
-            if bool(self.test_mode):
-                print(f'test_mode: {self.test_mode}')
-                self.save_text_file(markdown_text, 'test.md')
+            # if bool(self.test_mode):
+            #     print(f'test_mode: {self.test_mode}')
+            #     self.save_text_file(markdown_text, 'test2.md')
 
         elif self.ui_type == 'DeepSeek':
             mark = r"(?:Copy.+?Download.+?```)"
