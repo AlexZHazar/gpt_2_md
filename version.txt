@@ -16,12 +16,12 @@ VSVersionInfo(
           '040904b0',
           [
             StringStruct('CompanyName', ''),
-            StringStruct('FileDescription', 'ChatGPT exporter for Obsidian'),
+            StringStruct('FileDescription', 'GPT chat exporter for Obsidian'),
             StringStruct('FileVersion', '1.1.0.0'),
             StringStruct('InternalName', 'GPT2md'),
             StringStruct('LegalCopyright', ''),
-            StringStruct('OriginalFilename', 'ChatGPT to Obsidian.exe'),
-            StringStruct('ProductName', 'ChatGPT to Obsidian'),
+            StringStruct('OriginalFilename', 'GPT chat to Obsidian.exe'),
+            StringStruct('ProductName', 'GPT chat to Obsidian'),
             StringStruct('ProductVersion', '1.0.0.0')
           ]
         )

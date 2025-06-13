@@ -2,7 +2,7 @@
 pip install PyInstaller
 pip install --upgrade PyInstaller pyinstaller-hooks-contrib
 
-pyinstaller --windowed --onefile --name "ChatGPT to Obsidian" main.py --icon=ChatGPT_Obsidian.ico --version-file=version.txt
+pyinstaller --windowed --onefile --name "GPT chat to Obsidian" main.py --icon=ChatGPT_Obsidian.ico --version-file=version.txt
 """
 
 import base64
@@ -12,6 +12,7 @@ import sys
 from datetime import datetime
 from configparser import ConfigParser
 import quopri
+# from pathlib import Path
 
 import chardet
 import html2text
@@ -74,7 +75,7 @@ class GPTToMarkdownApp(QWidget):
         self.config = load_config()
 
         # main window setup
-        self.setWindowTitle("ChatGPT MHTML → Obsidian Markdown")
+        self.setWindowTitle("GPT chat MHTML → Obsidian Markdown")
         self.setWindowIcon(load_icon_from_base64())
 
         # widgets setup
@@ -679,6 +680,14 @@ class GPTToMarkdownApp(QWidget):
 
         if "DeepSeek" in html_content:
             print("DeepSeek")
+
+            # svg_blocks = self.extract_svg_blocks(html_content)
+            #
+            # with open("diagrams.md", "w", encoding="utf-8") as f:
+            #     for block in svg_blocks:
+            #         f.write(block + "\n\n")
+
+            html_content = re.sub(r"""(class="ds-segmented-button ds-segmented-button--selected">)Code""", r'\1mermaid', html_content, flags=re.MULTILINE)
             html_content = self.fix_deepseek_html(html_content)
             markdown_text = markdownify(html_content)
             self.test_list['html2text'] = ('md', html2text.html2text(html_content))
@@ -1081,6 +1090,17 @@ class GPTToMarkdownApp(QWidget):
     def save_text_file(text, file_path):
         with open(file_path, 'w', encoding='utf-8') as file:
             file.write(text)
+
+    # @staticmethod
+    # def extract_svg_blocks(html: str) -> list[str]:
+    #     soup = BeautifulSoup(html, "html.parser")
+    #     svg_blocks = []
+    #
+    #     for svg in soup.find_all("svg", class_="mermaid-svg"):
+    #         svg_html = str(svg)
+    #         svg_blocks.append(f'<div align="center">\n{svg_html}\n</div>')
+    #
+    #     return svg_blocks
 
 
 if __name__ == "__main__":
