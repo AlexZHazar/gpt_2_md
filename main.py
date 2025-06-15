@@ -807,7 +807,7 @@ class GPTToMarkdownApp(QWidget):
         # Store result and update UI
         self.md_text = markdown_text
         QMessageBox.information(self, "Готово", f"Преобразование завершено:\n{self.file_path}")
-        self.mhtml_path_label.setText(self.file_path)
+        self.mhtml_path_label.setText(self.ui_type +':  '+ self.file_path)
         self.split_pages_cb.setChecked(False)
         self.activate_all_widgets(self, True)
 
