@@ -898,7 +898,11 @@ class GPTToMarkdownApp(QWidget):
         replacements = [line.strip() for line in raw_value.strip().splitlines() if line.strip()]
         for replacement in replacements:
             r = replacement.split(':')
-            text = text.replace(r[0], r[1])
+            if r[0][0] == 'r':
+                pass
+                text = re.sub(fr'{r[0][1:]}', fr'{r[1]}', text, flags=re.MULTILINE)
+            else:
+                text = text.replace(r[0], r[1])
         return text
 
     def fix_text_regexp(self, text):
