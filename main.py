@@ -1115,3 +1115,4 @@ if __name__ == "__main__":
     window.setFixedSize(1000, 600)
     window.show()
     sys.exit(app.exec())
+
